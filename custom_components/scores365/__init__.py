@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryNotReady  # noqa: F401
 
 from .const import DOMAIN, PLATFORMS
 from .coordinator import Scores365Coordinator

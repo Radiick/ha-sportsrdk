@@ -17,9 +17,12 @@ API_PARAMS = {
     "userCountryId": "31",
 }
 
-# Polling intervals (segundos)
-SCAN_INTERVAL_LIVE = 10       # Partido en curso
-SCAN_INTERVAL_IDLE = 120      # Sin partido
+# Polling TTL — límites para el valor dinámico que devuelve la API
+TTL_FLOOR_LIVE = 5          # Mínimo en partido en curso (no saturar aunque ttl=1)
+TTL_CEILING_LIVE = 30       # Máximo en partido en curso (no perder eventos)
+TTL_FLOOR_IDLE = 30         # Mínimo sin partido
+TTL_CEILING_IDLE = 300      # Máximo sin partido (5 min)
+TTL_DEFAULT = 60            # Fallback si la API no devuelve ttl
 
 # Status groups de la API
 STATUS_GROUP_FINISHED = 4

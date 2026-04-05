@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="124" fill="#1a1a2e"/>
+  <circle cx="128" cy="128" r="124" fill="none" stroke="#00d4aa" stroke-width="4"/>
+
+  <!-- Soccer ball -->
+  <circle cx="128" cy="108" r="52" fill="white" stroke="#1a1a2e" stroke-width="2"/>
+
+  <!-- Pentagon center -->
+  <polygon points="128,72 148,86 140,110 116,110 108,86"
+           fill="#1a1a2e"/>
+
+  <!-- Pentagon side patches -->
+  <polygon points="76,88 96,82 104,96 86,108 72,100" fill="#1a1a2e"/>
+  <polygon points="180,88 160,82 152,96 170,108 184,100" fill="#1a1a2e"/>
+  <polygon points="100,148 108,128 128,136 128,154 110,156" fill="#1a1a2e"/>
+  <polygon points="156,148 148,128 128,136 128,154 146,156" fill="#1a1a2e"/>
+
+  <!-- Scoreboard bar -->
+  <rect x="32" y="172" width="192" height="56" rx="12" fill="#0f3460"/>
+  <rect x="32" y="172" width="192" height="56" rx="12" fill="none" stroke="#00d4aa" stroke-width="2"/>
+
+  <!-- Score numbers -->
+  <text x="80" y="212" font-family="Arial Black, sans-serif" font-size="34" font-weight="900"
+        fill="white" text-anchor="middle">2</text>
+  <text x="128" y="212" font-family="Arial Black, sans-serif" font-size="28" font-weight="900"
+        fill="#00d4aa" text-anchor="middle">-</text>
+  <text x="176" y="212" font-family="Arial Black, sans-serif" font-size="34" font-weight="900"
+        fill="white" text-anchor="middle">1</text>
+
+  <!-- Live dot -->
+  <circle cx="54" cy="185" r="5" fill="#ff4444"/>
+  <text x="63" y="189" font-family="Arial, sans-serif" font-size="10" font-weight="700"
+        fill="#ff4444">LIVE</text>
+
+  <!-- Signal arcs top-right -->
+  <path d="M 210 60 Q 230 40 250 60" fill="none" stroke="#00d4aa" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+  <path d="M 215 52 Q 235 28 255 52" fill="none" stroke="#00d4aa" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
+  <path d="M 220 44 Q 240 16 260 44" fill="none" stroke="#00d4aa" stroke-width="3" stroke-linecap="round" opacity="1"/>
+  <circle cx="208" cy="64" r="4" fill="#00d4aa"/>
+</svg>
