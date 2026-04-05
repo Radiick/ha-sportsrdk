@@ -135,3 +135,79 @@ automation:
 - La API de 365Scores es pública pero no oficial. Puede cambiar sin previo aviso.
 - El polling se hace cada 10 segundos durante un partido en vivo.
 - Esta integración es solo para fútbol.
+
+
+---
+
+## v1.2.0 — Novedades
+
+### Nuevas entidades por equipo
+
+| Entidad | Descripción |
+|---|---|
+| `switch.[equipo]_leds_global` | Maestro — habilita/deshabilita todos los LEDs |
+| `switch.[equipo]_leds_gol` | Permite efecto gol (requiere global ON) |
+| `switch.[equipo]_leds_medio_tiempo` | Permite efecto medio tiempo (requiere global ON) |
+| `number.[equipo]_delay_automatizacion` | Slider 0–60s de delay para automatizaciones |
+| `binary_sensor.[equipo]_datos_en_cache` | `on` si los datos son del caché (API sin respuesta) |
+
+### Lógica del switch maestro
+- Si **LEDs Global** se apaga → apaga automáticamente LEDs Gol y LEDs Medio Tiempo
+- LEDs Gol y LEDs Medio Tiempo **no se pueden encender** si el Global está OFF
+- Todos los switches y el slider **persisten** su valor al reiniciar Home Assistant
+
+### Mejoras técnicas
+- Retry automático con backoff exponencial (hasta 3 intentos)
+- Caché del último dato válido si la API falla
+- Scores ahora muestran enteros ("1" en lugar de "1.0")
+- URL de logos corregida con imagen de fallback
+
+---
+
+## Ejemplo completo con switches y delay
+
+```yaml
+automation:
+  - alias: "Efecto gol América"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.america_gol
+        to: "on"
+    condition:
+      - condition: state
+        entity_id: switch.america_leds_global
+        state: "on"
+      - condition: state
+        entity_id: switch.america_leds_gol
+        state: "on"
+    action:
+      - delay:
+          seconds: "{{ states('number.america_delay_automatizacion') | int }}"
+      - service: light.turn_on
+        target:
+          entity_id: light.tira_led_sala
+        data:
+          color_name: green
+          brightness: 255
+
+  - alias: "Efecto medio tiempo América"
+    trigger:
+      - platform: state
+        entity_id: sensor.america_minuto
+        to: "HT"         # Half Time — valor que manda 365scores
+    condition:
+      - condition: state
+        entity_id: switch.america_leds_global
+        state: "on"
+      - condition: state
+        entity_id: switch.america_leds_medio_tiempo
+        state: "on"
+    action:
+      - delay:
+          seconds: "{{ states('number.america_delay_automatizacion') | int }}"
+      - service: light.turn_on
+        target:
+          entity_id: light.tira_led_sala
+        data:
+          color_name: yellow
+```

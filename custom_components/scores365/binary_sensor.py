@@ -15,11 +15,12 @@ from .coordinator import Scores365Coordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-# (sensor_type, friendly_name, icon, device_class)
 BINARY_DEFINITIONS = [
+    # (sensor_type, friendly_name, icon, device_class)
     ("partido_en_curso",    "Partido en Curso",     "mdi:soccer",       BinarySensorDeviceClass.RUNNING),
     ("gol",                 "Gol",                  "mdi:soccer-field", None),
     ("resultado_favorable", "Resultado Favorable",  "mdi:thumb-up",     None),
+    ("datos_en_cache",      "Datos en Caché",       "mdi:cached",       BinarySensorDeviceClass.PROBLEM),
 ]
 
 
@@ -36,18 +37,17 @@ async def async_setup_entry(
 
 
 class Scores365BinarySensor(CoordinatorEntity, BinarySensorEntity):
-    """Binary sensor para la integración 365Scores."""
 
     def __init__(self, coordinator: Scores365Coordinator, entry: ConfigEntry,
                  sensor_type: str, friendly_name: str, icon: str,
                  device_class: BinarySensorDeviceClass | None) -> None:
         super().__init__(coordinator)
-        self._sensor_type = sensor_type
-        self._team_name = entry.data[CONF_TEAM_NAME]
-        self._competitor_id = entry.data[CONF_COMPETITOR_ID]
-        self._attr_name = f"{self._team_name} {friendly_name}"
+        self._sensor_type    = sensor_type
+        self._team_name      = entry.data[CONF_TEAM_NAME]
+        self._competitor_id  = entry.data[CONF_COMPETITOR_ID]
+        self._attr_name      = f"{self._team_name} {friendly_name}"
         self._attr_unique_id = f"{DOMAIN}_{self._competitor_id}_{sensor_type}"
-        self._attr_icon = icon
+        self._attr_icon      = icon
         self._attr_device_class = device_class
 
     @property
@@ -57,12 +57,11 @@ class Scores365BinarySensor(CoordinatorEntity, BinarySensorEntity):
             name=self._team_name,
             manufacturer="365Scores",
             model="Fútbol en vivo",
-            sw_version="1.0.0",
+            sw_version="1.2.0",
         )
 
     @property
     def entity_picture(self) -> str | None:
-        """Logo del equipo en el binary sensor de partido en curso."""
         if self._sensor_type == "partido_en_curso":
             return self.coordinator.team_logo_url
         return None
@@ -80,6 +79,8 @@ class Scores365BinarySensor(CoordinatorEntity, BinarySensorEntity):
             case "resultado_favorable":
                 last = data.get("last")
                 return last.get("favorable", False) if last else None
+            case "datos_en_cache":
+                return data.get("stale", False)
         return None
 
     @property
@@ -111,13 +112,16 @@ class Scores365BinarySensor(CoordinatorEntity, BinarySensorEntity):
             last = data.get("last")
             if last:
                 attrs.update({
-                    "resultado":    last["result"],
-                    "local":        last["home_name"],
-                    "visitante":    last["away_name"],
-                    "score":        f"{last['home_score']} - {last['away_score']}",
-                    "logo_local":   last.get("home_logo", ""),
+                    "resultado":      last["result"],
+                    "local":          last["home_name"],
+                    "visitante":      last["away_name"],
+                    "score":          f"{int(last['home_score'])} - {int(last['away_score'])}",
+                    "logo_local":     last.get("home_logo", ""),
                     "logo_visitante": last.get("away_logo", ""),
                 })
+
+        if self._sensor_type == "datos_en_cache":
+            attrs["ultimo_error"] = data.get("error", "")
 
         return attrs
 
