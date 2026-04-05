@@ -6,7 +6,7 @@
   "documentation": "https://github.com/tu-usuario/hacs-365scores",
   "issue_tracker": "https://github.com/tu-usuario/hacs-365scores/issues",
   "dependencies": [],
-  "codeowners": ["@tu-usuario"],
+  "codeowners": ["@radiick"],
   "requirements": ["aiohttp>=3.8.0"],
   "iot_class": "cloud_polling",
   "integration_type": "hub"
