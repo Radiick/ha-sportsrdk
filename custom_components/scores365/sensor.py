@@ -6,6 +6,7 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -23,22 +24,22 @@ from .coordinator import Scores365Coordinator
 _LOGGER = logging.getLogger(__name__)
 
 SENSOR_DEFINITIONS = [
-    # (sensor_type, friendly_name, icon)
-    ("marcador_local",      "Marcador Local",       "mdi:scoreboard"),
-    ("marcador_visitante",  "Marcador Visitante",   "mdi:scoreboard"),
-    ("equipo_local",        "Equipo Local",         "mdi:shield"),
-    ("equipo_visitante",    "Equipo Visitante",     "mdi:shield-outline"),
-    ("minuto_partido",      "Minuto",               "mdi:timer"),
-    ("estado_partido",      "Estado del Partido",   "mdi:soccer-field"),
-    ("competicion",         "Competición",          "mdi:trophy"),
-    ("ttl_actual",          "TTL de Polling",       "mdi:refresh"),
-    ("proximo_equipos",     "Próximo: Equipos",     "mdi:calendar-clock"),
-    ("proximo_fecha",       "Próximo: Fecha",       "mdi:calendar"),
-    ("proximo_timestamp",   "Próximo: Timestamp",   "mdi:clock-outline"),
-    ("proximo_liga",        "Próximo: Liga",        "mdi:trophy-outline"),
-    ("ultimo_equipos",      "Último: Equipos",      "mdi:history"),
-    ("ultimo_marcador",     "Último: Marcador",     "mdi:scoreboard-outline"),
-    ("ultimo_resultado",    "Último: Resultado",    "mdi:check-circle"),
+    # (sensor_type, friendly_name, icon, entity_category)
+    ("marcador_local",      "Marcador Local",       "mdi:scoreboard",       None),
+    ("marcador_visitante",  "Marcador Visitante",   "mdi:scoreboard",       None),
+    ("equipo_local",        "Equipo Local",         "mdi:shield",           None),
+    ("equipo_visitante",    "Equipo Visitante",     "mdi:shield-outline",   None),
+    ("minuto_partido",      "Minuto",               "mdi:timer",            None),
+    ("estado_partido",      "Estado del Partido",   "mdi:soccer-field",     None),
+    ("competicion",         "Competición",          "mdi:trophy",           EntityCategory.DIAGNOSTIC),
+    ("ttl_actual",          "TTL de Polling",       "mdi:refresh",          EntityCategory.DIAGNOSTIC),
+    ("proximo_equipos",     "Próximo: Equipos",     "mdi:calendar-clock",   None),
+    ("proximo_fecha",       "Próximo: Fecha",       "mdi:calendar",         None),
+    ("proximo_timestamp",   "Próximo: Timestamp",   "mdi:clock-outline",    None),
+    ("proximo_liga",        "Próximo: Liga",        "mdi:trophy-outline",   None),
+    ("ultimo_equipos",      "Último: Equipos",      "mdi:history",          None),
+    ("ultimo_marcador",     "Último: Marcador",     "mdi:scoreboard-outline", None),
+    ("ultimo_resultado",    "Último: Resultado",    "mdi:check-circle",     None),
 ]
 
 
@@ -49,22 +50,24 @@ async def async_setup_entry(
 ) -> None:
     coordinator: Scores365Coordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([
-        Scores365Sensor(coordinator, entry, stype, fname, icon)
-        for stype, fname, icon in SENSOR_DEFINITIONS
+        Scores365Sensor(coordinator, entry, stype, fname, icon, ecat)
+        for stype, fname, icon, ecat in SENSOR_DEFINITIONS
     ])
 
 
 class Scores365Sensor(CoordinatorEntity, SensorEntity):
 
     def __init__(self, coordinator: Scores365Coordinator, entry: ConfigEntry,
-                 sensor_type: str, friendly_name: str, icon: str) -> None:
+                 sensor_type: str, friendly_name: str, icon: str,
+                 entity_category: EntityCategory | None) -> None:
         super().__init__(coordinator)
-        self._sensor_type    = sensor_type
-        self._team_name      = entry.data[CONF_TEAM_NAME]
-        self._competitor_id  = entry.data[CONF_COMPETITOR_ID]
-        self._attr_name      = f"{self._team_name} {friendly_name}"
-        self._attr_unique_id = f"{DOMAIN}_{self._competitor_id}_{sensor_type}"
-        self._attr_icon      = icon
+        self._sensor_type           = sensor_type
+        self._team_name             = entry.data[CONF_TEAM_NAME]
+        self._competitor_id         = entry.data[CONF_COMPETITOR_ID]
+        self._attr_name             = f"{self._team_name} {friendly_name}"
+        self._attr_unique_id        = f"{DOMAIN}_{self._competitor_id}_{sensor_type}"
+        self._attr_icon             = icon
+        self._attr_entity_category  = entity_category
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -73,15 +76,21 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
             name=self._team_name,
             manufacturer="365Scores",
             model="Fútbol en vivo",
-            sw_version="1.2.0",
+            sw_version="1.2.2",
             configuration_url="https://www.365scores.com",
         )
 
     @property
     def entity_picture(self) -> str | None:
-        if self._sensor_type in ("marcador_local", "marcador_visitante",
-                                  "estado_partido", "equipo_local"):
-            return self.coordinator.team_logo_url
+        """Logo del equipo local o visitante según el sensor, tomado del partido actual."""
+        data = self.coordinator.data
+        if not data:
+            return None
+        current = data.get("current")
+        if self._sensor_type == "equipo_local":
+            return current.get("home_logo") if current else None
+        if self._sensor_type == "equipo_visitante":
+            return current.get("away_logo") if current else None
         return None
 
     @property

@@ -5,6 +5,7 @@ import logging
 
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -16,11 +17,11 @@ from .coordinator import Scores365Coordinator
 _LOGGER = logging.getLogger(__name__)
 
 BINARY_DEFINITIONS = [
-    # (sensor_type, friendly_name, icon, device_class)
-    ("partido_en_curso",    "Partido en Curso",     "mdi:soccer",       BinarySensorDeviceClass.RUNNING),
-    ("gol",                 "Gol",                  "mdi:soccer-field", None),
-    ("resultado_favorable", "Resultado Favorable",  "mdi:thumb-up",     None),
-    ("datos_en_cache",      "Datos en Caché",       "mdi:cached",       BinarySensorDeviceClass.PROBLEM),
+    # (sensor_type, friendly_name, icon, device_class, entity_category)
+    ("partido_en_curso",    "Partido en Curso",     "mdi:soccer",       BinarySensorDeviceClass.RUNNING, None),
+    ("gol",                 "Gol",                  "mdi:soccer-field", None,                            None),
+    ("resultado_favorable", "Resultado Favorable",  "mdi:thumb-up",     None,                            None),
+    ("datos_en_cache",      "Datos en Caché",       "mdi:cached",       BinarySensorDeviceClass.PROBLEM, EntityCategory.DIAGNOSTIC),
 ]
 
 
@@ -31,8 +32,8 @@ async def async_setup_entry(
 ) -> None:
     coordinator: Scores365Coordinator = hass.data[DOMAIN][entry.entry_id]
     async_add_entities([
-        Scores365BinarySensor(coordinator, entry, stype, fname, icon, dclass)
-        for stype, fname, icon, dclass in BINARY_DEFINITIONS
+        Scores365BinarySensor(coordinator, entry, stype, fname, icon, dclass, ecat)
+        for stype, fname, icon, dclass, ecat in BINARY_DEFINITIONS
     ])
 
 
@@ -40,15 +41,17 @@ class Scores365BinarySensor(CoordinatorEntity, BinarySensorEntity):
 
     def __init__(self, coordinator: Scores365Coordinator, entry: ConfigEntry,
                  sensor_type: str, friendly_name: str, icon: str,
-                 device_class: BinarySensorDeviceClass | None) -> None:
+                 device_class: BinarySensorDeviceClass | None,
+                 entity_category: EntityCategory | None) -> None:
         super().__init__(coordinator)
-        self._sensor_type    = sensor_type
-        self._team_name      = entry.data[CONF_TEAM_NAME]
-        self._competitor_id  = entry.data[CONF_COMPETITOR_ID]
-        self._attr_name      = f"{self._team_name} {friendly_name}"
-        self._attr_unique_id = f"{DOMAIN}_{self._competitor_id}_{sensor_type}"
-        self._attr_icon      = icon
-        self._attr_device_class = device_class
+        self._sensor_type           = sensor_type
+        self._team_name             = entry.data[CONF_TEAM_NAME]
+        self._competitor_id         = entry.data[CONF_COMPETITOR_ID]
+        self._attr_name             = f"{self._team_name} {friendly_name}"
+        self._attr_unique_id        = f"{DOMAIN}_{self._competitor_id}_{sensor_type}"
+        self._attr_icon             = icon
+        self._attr_device_class     = device_class
+        self._attr_entity_category  = entity_category
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -57,14 +60,8 @@ class Scores365BinarySensor(CoordinatorEntity, BinarySensorEntity):
             name=self._team_name,
             manufacturer="365Scores",
             model="Fútbol en vivo",
-            sw_version="1.2.0",
+            sw_version="1.2.2",
         )
-
-    @property
-    def entity_picture(self) -> str | None:
-        if self._sensor_type == "partido_en_curso":
-            return self.coordinator.team_logo_url
-        return None
 
     @property
     def is_on(self) -> bool | None:
