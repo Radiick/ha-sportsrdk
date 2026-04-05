@@ -1,7 +1,7 @@
 {
   "domain": "scores365",
   "name": "365Scores - Fútbol en vivo",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "config_flow": true,
   "documentation": "https://github.com/Radiick/ha-sportsrdk/",
   "issue_tracker": "https://github.com/Radiick/ha-sportsrdk//issues",
