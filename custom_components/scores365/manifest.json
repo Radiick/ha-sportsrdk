@@ -3,7 +3,10 @@
   "name": "365Scores - Fútbol en vivo",
   "version": "1.3.0",
   "config_flow": true,
+  "documentation": "https://github.com/Radiick/ha-sportsrdk/",
+  "issue_tracker": "https://github.com/Radiick/ha-sportsrdk//issues",
   "dependencies": [],
+  "codeowners": ["@Radiick"],
   "requirements": ["aiohttp>=3.8.0"],
   "iot_class": "cloud_polling",
   "integration_type": "hub"
