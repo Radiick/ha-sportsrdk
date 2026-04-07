@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
@@ -25,22 +25,21 @@ _LOGGER = logging.getLogger(__name__)
 
 SENSOR_DEFINITIONS = [
     # (sensor_type, friendly_name, icon, entity_category)
-    ("marcador_local",      "Marcador Local",       "mdi:scoreboard",       None),
-    ("marcador_visitante",  "Marcador Visitante",   "mdi:scoreboard",       None),
-    ("equipo_local",        "Equipo Local",         "mdi:shield",           None),
-    ("equipo_visitante",    "Equipo Visitante",     "mdi:shield-outline",   None),
-    ("minuto_partido",      "Minuto",               "mdi:timer",            None),
-    ("estado_partido",      "Estado del Partido",   "mdi:soccer-field",     None),
-    ("competicion",         "Competición",          "mdi:trophy",           EntityCategory.DIAGNOSTIC),
-    ("ttl_actual",          "TTL de Polling",       "mdi:refresh",          EntityCategory.DIAGNOSTIC),
-    ("proximo_equipos",          "Próximo: Equipos",          "mdi:calendar-clock",   None),
-    ("proximo_fecha",            "Próximo: Fecha",            "mdi:calendar",         None),
-    ("proximo_timestamp",        "Próximo: Timestamp -30min", "mdi:clock-outline",    None),
-    ("proximo_timestamp_5min",   "Próximo: Timestamp -5min",  "mdi:clock-alert",      None),
-    ("proximo_liga",             "Próximo: Liga",             "mdi:trophy-outline",   None),
-    ("ultimo_equipos",      "Último: Equipos",      "mdi:history",          None),
-    ("ultimo_marcador",     "Último: Marcador",     "mdi:scoreboard-outline", None),
-    ("ultimo_resultado",    "Último: Resultado",    "mdi:check-circle",     None),
+    ("marcador_local",       "Marcador Local",         "mdi:scoreboard",         None),
+    ("marcador_visitante",   "Marcador Visitante",     "mdi:scoreboard",         None),
+    ("equipo_local",         "Equipo Local",           "mdi:shield",             None),
+    ("equipo_visitante",     "Equipo Visitante",       "mdi:shield-outline",     None),
+    ("minuto_partido",       "Minuto",                 "mdi:timer",              None),
+    ("estado_partido",       "Estado del Partido",     "mdi:soccer-field",       None),
+    ("competicion",          "Competición",            "mdi:trophy",             EntityCategory.DIAGNOSTIC),
+    ("ttl_actual",           "TTL de Polling",         "mdi:refresh",            EntityCategory.DIAGNOSTIC),
+    ("proximo_equipos",      "Próximo: Equipos",       "mdi:calendar-clock",     None),
+    ("proximo_fecha",        "Próximo: Fecha",         "mdi:calendar",           None),
+    ("proximo_datetime_5min","Próximo: -5min",         "mdi:clock-alert-outline",None),
+    ("proximo_liga",         "Próximo: Liga",          "mdi:trophy-outline",     None),
+    ("ultimo_equipos",       "Último: Equipos",        "mdi:history",            None),
+    ("ultimo_marcador",      "Último: Marcador",       "mdi:scoreboard-outline", None),
+    ("ultimo_resultado",     "Último: Resultado",      "mdi:check-circle",       None),
 ]
 
 
@@ -69,6 +68,10 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id        = f"{DOMAIN}_{self._competitor_id}_{sensor_type}"
         self._attr_icon             = icon
         self._attr_entity_category  = entity_category
+        # El sensor de datetime necesita device_class TIMESTAMP para que
+        # platform: time en el blueprint lo reconozca como hora de disparo
+        if sensor_type == "proximo_datetime_5min":
+            self._attr_device_class = SensorDeviceClass.TIMESTAMP
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -77,7 +80,7 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
             name=self._team_name,
             manufacturer="365Scores",
             model="Fútbol en vivo",
-            sw_version="1.3.0",
+            sw_version="1.4.0",
             configuration_url="https://www.365scores.com",
         )
 
@@ -131,10 +134,9 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
                 return nxt["teams"] if nxt else None
             case "proximo_fecha":
                 return nxt["start_time"] if nxt else None
-            case "proximo_timestamp":
-                return nxt["start_timestamp"] if nxt else None
-            case "proximo_timestamp_5min":
-                return nxt["start_timestamp_5min"] if nxt else None
+            case "proximo_datetime_5min":
+                # Devuelve datetime con TZ — HA lo reconoce como timestamp
+                return nxt["start_datetime_5min"] if nxt else None
             case "proximo_liga":
                 return nxt.get("competition") if nxt else None
             case "ultimo_equipos":

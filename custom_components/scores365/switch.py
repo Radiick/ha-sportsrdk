@@ -18,9 +18,7 @@ from .const import (
     SWITCH_EVENTO_EQUIPO_GANA,
     SWITCH_EVENTO_GLOBAL,
     SWITCH_EVENTO_GOL,
-    SWITCH_EVENTO_MEDIO_TIEMPO,
     SWITCH_EVENTO_PARTIDO_INICIA,
-    SWITCH_EVENTO_PARTIDO_TERMINA,
     SWITCH_EVENTO_PREVIO_PARTIDO,
     SWITCHES_DEPENDIENTES,
 )
@@ -29,13 +27,11 @@ _LOGGER = logging.getLogger(__name__)
 
 # (switch_key, friendly_name, icon, es_global)
 SWITCH_DEFINITIONS = [
-    (SWITCH_EVENTO_GLOBAL,          "Eventos Global",          "mdi:toggle-switch",        True),
-    (SWITCH_EVENTO_PREVIO_PARTIDO,  "Evento: Previo Partido",  "mdi:clock-alert-outline",  False),
-    (SWITCH_EVENTO_PARTIDO_INICIA,  "Evento: Partido Inicia",  "mdi:play-circle-outline",  False),
-    (SWITCH_EVENTO_MEDIO_TIEMPO,    "Evento: Medio Tiempo",    "mdi:timer-pause-outline",  False),
-    (SWITCH_EVENTO_PARTIDO_TERMINA, "Evento: Partido Termina", "mdi:stop-circle-outline",  False),
-    (SWITCH_EVENTO_GOL,             "Evento: Gol",             "mdi:soccer",               False),
-    (SWITCH_EVENTO_EQUIPO_GANA,     "Evento: Equipo Gana",     "mdi:trophy-outline",       False),
+    (SWITCH_EVENTO_GLOBAL,         "Eventos Global",         "mdi:toggle-switch",       True),
+    (SWITCH_EVENTO_PREVIO_PARTIDO, "Evento: Previo Partido", "mdi:clock-alert-outline", False),
+    (SWITCH_EVENTO_PARTIDO_INICIA, "Evento: Cambios Tiempo", "mdi:play-circle-outline", False),
+    (SWITCH_EVENTO_GOL,            "Evento: Gol",            "mdi:soccer",              False),
+    (SWITCH_EVENTO_EQUIPO_GANA,    "Evento: Equipo Gana",    "mdi:trophy-outline",      False),
 ]
 
 
@@ -93,7 +89,7 @@ class Scores365Switch(RestoreEntity, SwitchEntity):
             name=self._team_name,
             manufacturer="365Scores",
             model="Fútbol en vivo",
-            sw_version="1.3.0",
+            sw_version="1.4.0",
         )
 
     @property

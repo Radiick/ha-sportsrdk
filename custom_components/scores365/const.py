@@ -33,8 +33,8 @@ TTL_DEFAULT      = 60   # Fallback si la API no devuelve ttl
 
 # Reintentos en caso de error de red
 MAX_RETRIES        = 3
-RETRY_BACKOFF_BASE = 10   # segundos base para backoff exponencial
-RETRY_BACKOFF_MAX  = 300  # máximo backoff (5 min)
+RETRY_BACKOFF_BASE = 10
+RETRY_BACKOFF_MAX  = 300
 
 # Status groups de la API
 STATUS_GROUP_FINISHED = 4
@@ -56,20 +56,16 @@ RESULT_LOSS = "Perdió"
 GOAL_ALERT_DURATION = 30
 
 # Switch keys — eventos por equipo
-SWITCH_EVENTO_GLOBAL          = "evento_global"
-SWITCH_EVENTO_PREVIO_PARTIDO  = "evento_previo_partido"
-SWITCH_EVENTO_PARTIDO_INICIA  = "evento_partido_inicia"
-SWITCH_EVENTO_MEDIO_TIEMPO    = "evento_medio_tiempo"
-SWITCH_EVENTO_PARTIDO_TERMINA = "evento_partido_termina"
-SWITCH_EVENTO_GOL             = "evento_gol"
-SWITCH_EVENTO_EQUIPO_GANA     = "evento_equipo_gana"
+SWITCH_EVENTO_GLOBAL         = "evento_global"
+SWITCH_EVENTO_PREVIO_PARTIDO = "evento_previo_partido"
+SWITCH_EVENTO_PARTIDO_INICIA = "evento_partido_inicia"   # cubre todos los cambios de tiempo
+SWITCH_EVENTO_GOL            = "evento_gol"
+SWITCH_EVENTO_EQUIPO_GANA    = "evento_equipo_gana"
 
-# Todos los switches dependientes del global (en orden de UI)
+# Todos los switches dependientes del global
 SWITCHES_DEPENDIENTES = [
     SWITCH_EVENTO_PREVIO_PARTIDO,
     SWITCH_EVENTO_PARTIDO_INICIA,
-    SWITCH_EVENTO_MEDIO_TIEMPO,
-    SWITCH_EVENTO_PARTIDO_TERMINA,
     SWITCH_EVENTO_GOL,
     SWITCH_EVENTO_EQUIPO_GANA,
 ]

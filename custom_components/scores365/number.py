@@ -75,7 +75,7 @@ class Scores365DelayNumber(RestoreEntity, NumberEntity):
             name=self._team_name,
             manufacturer="365Scores",
             model="Fútbol en vivo",
-            sw_version="1.3.0",
+            sw_version="1.4.0",
         )
 
     @property

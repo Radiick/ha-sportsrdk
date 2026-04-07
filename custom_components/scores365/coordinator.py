@@ -231,27 +231,31 @@ class Scores365Coordinator(DataUpdateCoordinator):
             home = next_game["homeCompetitor"]
             away = next_game["awayCompetitor"]
             start_time_str = next_game.get("startTime", "")
-            start_dt = start_ts = start_ts_5min = None
+            start_dt = None
+            start_datetime_5min = None
             if start_time_str:
                 try:
                     start_dt = datetime.fromisoformat(start_time_str)
-                    start_ts = int((start_dt - timedelta(minutes=30)).timestamp())
-                    start_ts_5min = int((start_dt - timedelta(minutes=5)).timestamp())
+                    # datetime con TZ para el sensor tipo timestamp de HA
+                    start_datetime_5min = start_dt - timedelta(minutes=5)
+                    # Asegurar que tenga timezone info
+                    if start_datetime_5min.tzinfo is None:
+                        from homeassistant.util import dt as dt_util
+                        start_datetime_5min = dt_util.as_local(start_datetime_5min)
                 except ValueError:
                     pass
             result["next"] = {
-                "home_name":           home.get("name", ""),
-                "away_name":           away.get("name", ""),
-                "home_id":             str(home.get("id", "")),
-                "away_id":             str(away.get("id", "")),
-                "home_logo":           LOGO_BASE_URL.format(competitor_id=home.get("id", "")),
-                "away_logo":           LOGO_BASE_URL.format(competitor_id=away.get("id", "")),
-                "teams":               f"{home.get('name', '')} vs {away.get('name', '')}",
-                "start_time":          start_dt.strftime("%d de %B de %Y, %H:%M") if start_dt else start_time_str,
-                "start_timestamp":     start_ts,
-                "start_timestamp_5min": start_ts_5min,
-                "competition":         next_game.get("competitionDisplayName", ""),
-                "status":              MATCH_STATUS_NO_MATCH,
+                "home_name":          home.get("name", ""),
+                "away_name":          away.get("name", ""),
+                "home_id":            str(home.get("id", "")),
+                "away_id":            str(away.get("id", "")),
+                "home_logo":          LOGO_BASE_URL.format(competitor_id=home.get("id", "")),
+                "away_logo":          LOGO_BASE_URL.format(competitor_id=away.get("id", "")),
+                "teams":              f"{home.get('name', '')} vs {away.get('name', '')}",
+                "start_time":         start_dt.strftime("%d de %B de %Y, %H:%M") if start_dt else start_time_str,
+                "start_datetime_5min": start_datetime_5min,
+                "competition":        next_game.get("competitionDisplayName", ""),
+                "status":             MATCH_STATUS_NO_MATCH,
             }
 
         # ---- Último partido ----
