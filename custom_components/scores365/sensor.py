@@ -186,13 +186,13 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
 
         if self._sensor_type == "proximo_equipos" and nxt:
             attrs.update({
-                "local":                   nxt["home_name"],
-                "visitante":               nxt["away_name"],
-                "fecha":                   nxt["start_time"],
-                "timestamp_30min_antes":   nxt["start_timestamp"],
-                "liga":                    nxt.get("competition", ""),
-                "logo_local":              nxt.get("home_logo", ""),
-                "logo_visitante":          nxt.get("away_logo", ""),
+                "local":            nxt["home_name"],
+                "visitante":        nxt["away_name"],
+                "fecha":            nxt["start_time"],
+                "datetime_5min":    str(nxt.get("start_datetime_5min", "")),
+                "liga":             nxt.get("competition", ""),
+                "logo_local":       nxt.get("home_logo", ""),
+                "logo_visitante":   nxt.get("away_logo", ""),
             })
 
         if self._sensor_type == "ultimo_marcador" and last:
