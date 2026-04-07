@@ -60,7 +60,7 @@ class Scores365BinarySensor(CoordinatorEntity, BinarySensorEntity):
             name=self._team_name,
             manufacturer="365Scores",
             model="Fútbol en vivo",
-            sw_version="1.2.2",
+            sw_version="1.3.0",
         )
 
     @property

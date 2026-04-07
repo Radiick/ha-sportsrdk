@@ -33,10 +33,11 @@ SENSOR_DEFINITIONS = [
     ("estado_partido",      "Estado del Partido",   "mdi:soccer-field",     None),
     ("competicion",         "Competición",          "mdi:trophy",           EntityCategory.DIAGNOSTIC),
     ("ttl_actual",          "TTL de Polling",       "mdi:refresh",          EntityCategory.DIAGNOSTIC),
-    ("proximo_equipos",     "Próximo: Equipos",     "mdi:calendar-clock",   None),
-    ("proximo_fecha",       "Próximo: Fecha",       "mdi:calendar",         None),
-    ("proximo_timestamp",   "Próximo: Timestamp",   "mdi:clock-outline",    None),
-    ("proximo_liga",        "Próximo: Liga",        "mdi:trophy-outline",   None),
+    ("proximo_equipos",          "Próximo: Equipos",          "mdi:calendar-clock",   None),
+    ("proximo_fecha",            "Próximo: Fecha",            "mdi:calendar",         None),
+    ("proximo_timestamp",        "Próximo: Timestamp -30min", "mdi:clock-outline",    None),
+    ("proximo_timestamp_5min",   "Próximo: Timestamp -5min",  "mdi:clock-alert",      None),
+    ("proximo_liga",             "Próximo: Liga",             "mdi:trophy-outline",   None),
     ("ultimo_equipos",      "Último: Equipos",      "mdi:history",          None),
     ("ultimo_marcador",     "Último: Marcador",     "mdi:scoreboard-outline", None),
     ("ultimo_resultado",    "Último: Resultado",    "mdi:check-circle",     None),
@@ -76,7 +77,7 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
             name=self._team_name,
             manufacturer="365Scores",
             model="Fútbol en vivo",
-            sw_version="1.2.2",
+            sw_version="1.3.0",
             configuration_url="https://www.365scores.com",
         )
 
@@ -132,6 +133,8 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
                 return nxt["start_time"] if nxt else None
             case "proximo_timestamp":
                 return nxt["start_timestamp"] if nxt else None
+            case "proximo_timestamp_5min":
+                return nxt["start_timestamp_5min"] if nxt else None
             case "proximo_liga":
                 return nxt.get("competition") if nxt else None
             case "ultimo_equipos":

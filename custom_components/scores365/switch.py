@@ -1,4 +1,4 @@
-"""Switches de control para automatizaciones de LEDs — 365Scores."""
+"""Switches de eventos por equipo — 365Scores."""
 from __future__ import annotations
 
 import logging
@@ -15,19 +15,27 @@ from .const import (
     CONF_COMPETITOR_ID,
     CONF_TEAM_NAME,
     DOMAIN,
-    SWITCH_LEDS_GLOBAL,
-    SWITCH_LEDS_GOL,
-    SWITCH_LEDS_MEDIO_TIEMPO,
+    SWITCH_EVENTO_EQUIPO_GANA,
+    SWITCH_EVENTO_GLOBAL,
+    SWITCH_EVENTO_GOL,
+    SWITCH_EVENTO_MEDIO_TIEMPO,
+    SWITCH_EVENTO_PARTIDO_INICIA,
+    SWITCH_EVENTO_PARTIDO_TERMINA,
+    SWITCH_EVENTO_PREVIO_PARTIDO,
+    SWITCHES_DEPENDIENTES,
 )
-from .coordinator import Scores365Coordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-# (switch_key, friendly_name, icon, depends_on_global)
+# (switch_key, friendly_name, icon, es_global)
 SWITCH_DEFINITIONS = [
-    (SWITCH_LEDS_GLOBAL,       "LEDs Global",       "mdi:led-strip-variant", False),
-    (SWITCH_LEDS_GOL,          "LEDs Gol",          "mdi:led-on",            True),
-    (SWITCH_LEDS_MEDIO_TIEMPO, "LEDs Medio Tiempo", "mdi:led-outline",       True),
+    (SWITCH_EVENTO_GLOBAL,          "Eventos Global",          "mdi:toggle-switch",        True),
+    (SWITCH_EVENTO_PREVIO_PARTIDO,  "Evento: Previo Partido",  "mdi:clock-alert-outline",  False),
+    (SWITCH_EVENTO_PARTIDO_INICIA,  "Evento: Partido Inicia",  "mdi:play-circle-outline",  False),
+    (SWITCH_EVENTO_MEDIO_TIEMPO,    "Evento: Medio Tiempo",    "mdi:timer-pause-outline",  False),
+    (SWITCH_EVENTO_PARTIDO_TERMINA, "Evento: Partido Termina", "mdi:stop-circle-outline",  False),
+    (SWITCH_EVENTO_GOL,             "Evento: Gol",             "mdi:soccer",               False),
+    (SWITCH_EVENTO_EQUIPO_GANA,     "Evento: Equipo Gana",     "mdi:trophy-outline",       False),
 ]
 
 
@@ -36,47 +44,38 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    coordinator: Scores365Coordinator = hass.data[DOMAIN][entry.entry_id]
-
-    switches = [
-        Scores365Switch(coordinator, entry, key, fname, icon, dep_global)
-        for key, fname, icon, dep_global in SWITCH_DEFINITIONS
-    ]
-    async_add_entities(switches)
+    async_add_entities([
+        Scores365Switch(entry, key, fname, icon, is_global)
+        for key, fname, icon, is_global in SWITCH_DEFINITIONS
+    ])
 
 
 class Scores365Switch(RestoreEntity, SwitchEntity):
     """
-    Switch persistente para control de automatizaciones de LEDs.
+    Switch persistente para habilitar/deshabilitar eventos por equipo.
 
-    RestoreEntity guarda el estado ON/OFF en el almacenamiento de HA
-    y lo restaura al reiniciar, sin necesidad de base de datos externa.
-
-    Reglas:
-      - leds_global: maestro. Al apagarse, apaga leds_gol y leds_medio_tiempo.
-      - leds_gol / leds_medio_tiempo: no se pueden encender si global está OFF.
+    Lógica del global:
+      - Al apagarse → apaga todos los switches dependientes
+      - Los dependientes no se pueden encender si el global está OFF
     """
 
-    def __init__(self, coordinator: Scores365Coordinator, entry: ConfigEntry,
-                 switch_key: str, friendly_name: str, icon: str,
-                 depends_on_global: bool) -> None:
-        self._coordinator      = coordinator
-        self._switch_key       = switch_key
-        self._team_name        = entry.data[CONF_TEAM_NAME]
-        self._competitor_id    = entry.data[CONF_COMPETITOR_ID]
-        self._depends_on_global = depends_on_global
-        self._attr_name        = f"{self._team_name} {friendly_name}"
-        self._attr_unique_id   = f"{DOMAIN}_{self._competitor_id}_{switch_key}"
-        self._attr_icon        = icon
-        self._is_on: bool      = False   # estado en memoria
-        self._entry            = entry
+    def __init__(self, entry: ConfigEntry, switch_key: str,
+                 friendly_name: str, icon: str, is_global: bool) -> None:
+        self._entry         = entry
+        self._switch_key    = switch_key
+        self._team_name     = entry.data[CONF_TEAM_NAME]
+        self._competitor_id = entry.data[CONF_COMPETITOR_ID]
+        self._is_global     = is_global
+        self._is_on: bool   = True   # por defecto ON al instalar
+        self._attr_name         = f"{self._team_name} {friendly_name}"
+        self._attr_unique_id    = f"{DOMAIN}_{self._competitor_id}_{switch_key}"
+        self._attr_icon         = icon
 
     # ------------------------------------------------------------------
     # Restore state al arrancar HA
     # ------------------------------------------------------------------
 
     async def async_added_to_hass(self) -> None:
-        """Restaura el último estado conocido."""
         await super().async_added_to_hass()
         last = await self.async_get_last_state()
         if last is not None:
@@ -94,7 +93,7 @@ class Scores365Switch(RestoreEntity, SwitchEntity):
             name=self._team_name,
             manufacturer="365Scores",
             model="Fútbol en vivo",
-            sw_version="1.2.2",
+            sw_version="1.3.0",
         )
 
     @property
@@ -103,20 +102,20 @@ class Scores365Switch(RestoreEntity, SwitchEntity):
 
     @property
     def available(self) -> bool:
-        return True   # los switches siempre están disponibles
+        return True
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         attrs: dict[str, Any] = {
-            "competitor_id":     self._competitor_id,
-            "team":              self._team_name,
-            "depende_de_global": self._depends_on_global,
+            "competitor_id": self._competitor_id,
+            "team":          self._team_name,
+            "es_global":     self._is_global,
         }
-        if self._depends_on_global:
-            global_state = self._get_global_switch_state()
-            attrs["global_activo"] = global_state
-            if not global_state:
-                attrs["motivo_inactivo"] = "LEDs Global está apagado"
+        if not self._is_global:
+            global_on = self._get_global_state()
+            attrs["global_activo"] = global_on
+            if not global_on:
+                attrs["motivo_inactivo"] = "Eventos Global está apagado"
         return attrs
 
     # ------------------------------------------------------------------
@@ -124,53 +123,47 @@ class Scores365Switch(RestoreEntity, SwitchEntity):
     # ------------------------------------------------------------------
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Enciende el switch. Si depende del global, lo verifica primero."""
-        if self._depends_on_global and not self._get_global_switch_state():
+        """Enciende el switch — los dependientes verifican el global primero."""
+        if not self._is_global and not self._get_global_state():
             _LOGGER.warning(
-                "%s: No se puede encender '%s' porque LEDs Global está apagado",
+                "%s: No se puede encender '%s' — Eventos Global está apagado",
                 self._team_name, self._switch_key,
             )
-            return   # no encender, no lanzar error
-
+            return
         self._is_on = True
         self.async_write_ha_state()
         _LOGGER.debug("%s: %s → ON", self._team_name, self._switch_key)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Apaga el switch. Si es el global, apaga los dependientes también."""
+        """Apaga el switch. Si es global, apaga todos los dependientes."""
         self._is_on = False
         self.async_write_ha_state()
         _LOGGER.debug("%s: %s → OFF", self._team_name, self._switch_key)
 
-        if self._switch_key == SWITCH_LEDS_GLOBAL:
-            await self._turn_off_dependents()
+        if self._is_global:
+            await self._apagar_dependientes()
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
-    def _get_global_switch_state(self) -> bool:
-        """Busca el estado del switch global en el mismo device."""
-        global_uid = f"{DOMAIN}_{self._competitor_id}_{SWITCH_LEDS_GLOBAL}"
-        entity_registry = self.hass.data.get("entity_registry")
-        if entity_registry is None:
-            from homeassistant.helpers import entity_registry as er
-            entity_registry = er.async_get(self.hass)
-
-        for entity in entity_registry.entities.values():
+    def _get_global_state(self) -> bool:
+        """Lee el estado actual del switch global de este equipo."""
+        from homeassistant.helpers import entity_registry as er
+        registry = er.async_get(self.hass)
+        global_uid = f"{DOMAIN}_{self._competitor_id}_{SWITCH_EVENTO_GLOBAL}"
+        for entity in registry.entities.values():
             if entity.unique_id == global_uid:
                 state = self.hass.states.get(entity.entity_id)
-                if state:
-                    return state.state == "on"
+                return state.state == "on" if state else False
         return False
 
-    async def _turn_off_dependents(self) -> None:
-        """Apaga leds_gol y leds_medio_tiempo cuando el global se apaga."""
-        dependent_keys = [SWITCH_LEDS_GOL, SWITCH_LEDS_MEDIO_TIEMPO]
+    async def _apagar_dependientes(self) -> None:
+        """Apaga todos los switches dependientes cuando el global se apaga."""
         from homeassistant.helpers import entity_registry as er
         registry = er.async_get(self.hass)
 
-        for key in dependent_keys:
+        for key in SWITCHES_DEPENDIENTES:
             uid = f"{DOMAIN}_{self._competitor_id}_{key}"
             for entity in registry.entities.values():
                 if entity.unique_id == uid:
@@ -181,4 +174,7 @@ class Scores365Switch(RestoreEntity, SwitchEntity):
                             {"entity_id": entity.entity_id},
                             blocking=True,
                         )
-                        _LOGGER.debug("%s: %s apagado por global OFF", self._team_name, key)
+                        _LOGGER.debug(
+                            "%s: %s apagado por Global OFF",
+                            self._team_name, key,
+                        )

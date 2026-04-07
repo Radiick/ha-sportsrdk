@@ -5,8 +5,8 @@ PLATFORMS = ["sensor", "binary_sensor", "switch", "number"]
 
 # Config keys
 CONF_COMPETITOR_ID = "competitor_id"
-CONF_TEAM_NAME = "team_name"
-CONF_LEAGUE_NAME = "league_name"
+CONF_TEAM_NAME     = "team_name"
+CONF_LEAGUE_NAME   = "league_name"
 
 # API
 API_BASE_URL = "https://webws.365scores.com/web/games/current/"
@@ -17,7 +17,7 @@ API_PARAMS = {
     "userCountryId": "31",
 }
 
-# Logo URL (usar la URL correcta con fallback de imagen por defecto)
+# Logo URL con fallback de imagen por defecto
 LOGO_BASE_URL = (
     "https://imagecache.365scores.com/image/upload/"
     "f_png,w_80,h_80,c_limit,q_auto:eco,dpr_2,d_Competitors:default1.png"
@@ -25,14 +25,14 @@ LOGO_BASE_URL = (
 )
 
 # Polling TTL — límites para el valor dinámico que devuelve la API
-TTL_FLOOR_LIVE    = 5     # Mínimo en partido en curso
-TTL_CEILING_LIVE  = 30    # Máximo en partido en curso
-TTL_FLOOR_IDLE    = 30    # Mínimo sin partido
-TTL_CEILING_IDLE  = 300   # Máximo sin partido (5 min)
-TTL_DEFAULT       = 60    # Fallback si la API no devuelve ttl
+TTL_FLOOR_LIVE   = 5    # Mínimo en partido en curso
+TTL_CEILING_LIVE = 30   # Máximo en partido en curso
+TTL_FLOOR_IDLE   = 30   # Mínimo sin partido
+TTL_CEILING_IDLE = 300  # Máximo sin partido (5 min)
+TTL_DEFAULT      = 60   # Fallback si la API no devuelve ttl
 
 # Reintentos en caso de error de red
-MAX_RETRIES       = 3
+MAX_RETRIES        = 3
 RETRY_BACKOFF_BASE = 10   # segundos base para backoff exponencial
 RETRY_BACKOFF_MAX  = 300  # máximo backoff (5 min)
 
@@ -55,10 +55,24 @@ RESULT_LOSS = "Perdió"
 # Goal alert duration (segundos)
 GOAL_ALERT_DURATION = 30
 
-# Switch keys — usados como unique_id y como clave en el store
-SWITCH_LEDS_GLOBAL       = "leds_global"
-SWITCH_LEDS_GOL          = "leds_gol"
-SWITCH_LEDS_MEDIO_TIEMPO = "leds_medio_tiempo"
+# Switch keys — eventos por equipo
+SWITCH_EVENTO_GLOBAL          = "evento_global"
+SWITCH_EVENTO_PREVIO_PARTIDO  = "evento_previo_partido"
+SWITCH_EVENTO_PARTIDO_INICIA  = "evento_partido_inicia"
+SWITCH_EVENTO_MEDIO_TIEMPO    = "evento_medio_tiempo"
+SWITCH_EVENTO_PARTIDO_TERMINA = "evento_partido_termina"
+SWITCH_EVENTO_GOL             = "evento_gol"
+SWITCH_EVENTO_EQUIPO_GANA     = "evento_equipo_gana"
+
+# Todos los switches dependientes del global (en orden de UI)
+SWITCHES_DEPENDIENTES = [
+    SWITCH_EVENTO_PREVIO_PARTIDO,
+    SWITCH_EVENTO_PARTIDO_INICIA,
+    SWITCH_EVENTO_MEDIO_TIEMPO,
+    SWITCH_EVENTO_PARTIDO_TERMINA,
+    SWITCH_EVENTO_GOL,
+    SWITCH_EVENTO_EQUIPO_GANA,
+]
 
 # Number keys
 NUMBER_DELAY = "delay_automatizacion"
