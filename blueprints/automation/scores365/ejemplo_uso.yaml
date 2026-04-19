@@ -1,0 +1,82 @@
+# ============================================================
+# EJEMPLO DE AUTOMATIZACIÓN USANDO EL BLUEPRINT 365Scores
+# ============================================================
+
+automation:
+  - alias: "Real Madrid — Eventos del partido"
+    use_blueprint:
+      path: scores365/scores365_eventos_partido.yaml
+      input:
+
+        # --- Sección 1: Entidades ---
+        sensor_estado:         sensor.real_madrid_estado_del_partido
+        sensor_minuto:         sensor.real_madrid_minuto
+        sensor_timestamp_5min: sensor.real_madrid_proximo_timestamp_5min
+        binary_gol:            binary_sensor.real_madrid_gol
+        binary_favorable:      binary_sensor.real_madrid_resultado_favorable
+
+        # --- Sección 2: Switches y delay ---
+        switch_global:          switch.real_madrid_eventos_global
+        switch_previo_partido:  switch.real_madrid_evento_previo_partido
+        switch_partido_inicia:  switch.real_madrid_evento_partido_inicia
+        switch_medio_tiempo:    switch.real_madrid_evento_medio_tiempo
+        switch_partido_termina: switch.real_madrid_evento_partido_termina
+        switch_gol:             switch.real_madrid_evento_gol
+        switch_equipo_gana:     switch.real_madrid_evento_equipo_gana
+        number_delay:           number.real_madrid_delay_automatizacion
+
+        # --- Sección 3: Acciones ---
+
+        # ⏰ PREVIO AL PARTIDO
+        previo_partido_accion:
+          - service: notify.mobile_app_mi_telefono
+            data:
+              title: "⏰ ¡En 5 minutos empieza!"
+              message: "{{ local }} vs {{ visitante }}"
+
+        # ⚽ PARTIDO INICIA
+        partido_inicia_accion:
+          - service: notify.mobile_app_mi_telefono
+            data:
+              title: "🏟️ ¡Arrancó el partido!"
+              message: "{{ local }} vs {{ visitante }}"
+
+        # 🔔 MEDIO TIEMPO
+        medio_tiempo_accion:
+          - service: notify.mobile_app_mi_telefono
+            data:
+              title: "⏸️ Medio tiempo"
+              message: "{{ local }} {{ score_local }} — {{ score_visitante }} {{ visitante }}"
+
+        # ▶️ SEGUNDO TIEMPO
+        segundo_tiempo_accion:
+          - service: notify.mobile_app_mi_telefono
+            data:
+              title: "▶️ ¡Arranca el segundo tiempo!"
+              message: "{{ local }} {{ score_local }} — {{ score_visitante }} {{ visitante }}"
+
+        # 🏁 PARTIDO TERMINA
+        partido_termina_accion:
+          - service: notify.mobile_app_mi_telefono
+            data:
+              title: "🏁 Partido terminado"
+              message: >
+                {{ local }} {{ score_local }} — {{ score_visitante }} {{ visitante }}
+                | {{ resultado }}
+
+        # 🥅 GOL
+        gol_accion:
+          - service: notify.mobile_app_mi_telefono
+            data:
+              title: "⚽ ¡GOL de {{ equipo }}!"
+              message: >
+                {{ local }} {{ score_local }} — {{ score_visitante }} {{ visitante }}
+                | Min: {{ minuto }}
+
+        # 🏆 EQUIPO GANA
+        equipo_gana_accion:
+          - service: notify.mobile_app_mi_telefono
+            data:
+              title: "🏆 ¡{{ equipo }} ganó!"
+              message: >
+                {{ local }} {{ score_local }} — {{ score_visitante }} {{ visitante }}

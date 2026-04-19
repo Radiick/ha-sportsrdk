@@ -1,0 +1,385 @@
+blueprint:
+  name: "365Scores — Eventos del Partido"
+  description: >
+    Ejecuta acciones personalizadas para eventos del partido de un equipo
+    monitorado con la integración 365Scores.
+
+    **Eventos disponibles:**
+    - ⏰ 5 minutos antes del partido
+    - ⚽ Partido inicia
+    - 🔔 Medio tiempo
+    - ▶️ Segundo tiempo
+    - 🏁 Partido termina
+    - 🥅 Gol del equipo
+    - 🏆 Equipo gana
+
+    Los eventos de cambio de tiempo (inicia, medio tiempo, segundo tiempo,
+    termina) comparten el switch **Evento: Cambios Tiempo**.
+
+  domain: automation
+  input:
+
+    # ================================================================ #
+    # SECCIÓN 1 — ENTIDADES DEL EQUIPO                                  #
+    # ================================================================ #
+
+    seccion_entidades:
+      name: "📡 Entidades del equipo"
+      collapsed: true
+      input:
+
+        sensor_estado:
+          name: "Estado del Partido"
+          description: "`sensor.EQUIPO_estado_del_partido`"
+          selector:
+            entity:
+              integration: scores365
+              domain: sensor
+
+        sensor_minuto:
+          name: "Minuto"
+          description: "`sensor.EQUIPO_minuto`"
+          selector:
+            entity:
+              integration: scores365
+              domain: sensor
+
+        sensor_datetime_5min:
+          name: "Próximo: -5min"
+          description: "`sensor.EQUIPO_proximo_5min` — sensor tipo timestamp"
+          selector:
+            entity:
+              integration: scores365
+              domain: sensor
+              device_class: timestamp
+
+        binary_gol:
+          name: "Gol"
+          description: "`binary_sensor.EQUIPO_gol`"
+          selector:
+            entity:
+              integration: scores365
+              domain: binary_sensor
+
+        binary_favorable:
+          name: "Resultado Favorable"
+          description: "`binary_sensor.EQUIPO_resultado_favorable`"
+          selector:
+            entity:
+              integration: scores365
+              domain: binary_sensor
+
+    # ================================================================ #
+    # SECCIÓN 2 — SWITCHES Y DELAY                                      #
+    # ================================================================ #
+
+    seccion_switches:
+      name: "🎛️ Control de eventos"
+      collapsed: true
+      input:
+
+        switch_global:
+          name: "Eventos Global"
+          description: "`switch.EQUIPO_eventos_global`"
+          selector:
+            entity:
+              integration: scores365
+              domain: switch
+
+        switch_previo_partido:
+          name: "Evento: Previo Partido"
+          description: "`switch.EQUIPO_evento_previo_partido`"
+          selector:
+            entity:
+              integration: scores365
+              domain: switch
+
+        switch_cambios_tiempo:
+          name: "Evento: Cambios Tiempo"
+          description: >
+            `switch.EQUIPO_evento_cambios_tiempo`
+            Controla: Partido inicia, Medio tiempo, Segundo tiempo, Partido termina
+          selector:
+            entity:
+              integration: scores365
+              domain: switch
+
+        switch_gol:
+          name: "Evento: Gol"
+          description: "`switch.EQUIPO_evento_gol`"
+          selector:
+            entity:
+              integration: scores365
+              domain: switch
+
+        switch_equipo_gana:
+          name: "Evento: Equipo Gana"
+          description: "`switch.EQUIPO_evento_equipo_gana`"
+          selector:
+            entity:
+              integration: scores365
+              domain: switch
+
+        number_delay:
+          name: "Delay de automatización"
+          description: "`number.EQUIPO_delay_automatizacion`"
+          selector:
+            entity:
+              integration: scores365
+              domain: number
+
+    # ================================================================ #
+    # SECCIÓN 3 — ACCIONES                                              #
+    # ================================================================ #
+
+    seccion_acciones:
+      name: "⚡ Acciones por evento"
+      collapsed: false
+      input:
+
+        previo_partido_accion:
+          name: "⏰ Previo al partido — Acción"
+          description: >
+            5 minutos antes del próximo partido.
+            Variables: `{{ equipo }}`, `{{ local }}`, `{{ visitante }}`,
+            `{{ fecha_partido }}`
+          default: []
+          selector:
+            action:
+
+        partido_inicia_accion:
+          name: "⚽ Partido inicia — Acción"
+          description: >
+            Variables: `{{ equipo }}`, `{{ local }}`, `{{ visitante }}`
+          default: []
+          selector:
+            action:
+
+        medio_tiempo_accion:
+          name: "🔔 Medio tiempo — Acción"
+          description: >
+            Variables: `{{ equipo }}`, `{{ local }}`, `{{ visitante }}`,
+            `{{ score_local }}`, `{{ score_visitante }}`
+          default: []
+          selector:
+            action:
+
+        segundo_tiempo_accion:
+          name: "▶️ Segundo tiempo — Acción"
+          description: >
+            Reanuda tras el medio tiempo.
+            Variables: `{{ equipo }}`, `{{ local }}`, `{{ visitante }}`,
+            `{{ score_local }}`, `{{ score_visitante }}`
+          default: []
+          selector:
+            action:
+
+        partido_termina_accion:
+          name: "🏁 Partido termina — Acción"
+          description: >
+            Variables: `{{ equipo }}`, `{{ local }}`, `{{ visitante }}`,
+            `{{ score_local }}`, `{{ score_visitante }}`, `{{ resultado }}`
+          default: []
+          selector:
+            action:
+
+        gol_accion:
+          name: "🥅 Gol — Acción"
+          description: >
+            Variables: `{{ equipo }}`, `{{ local }}`, `{{ visitante }}`,
+            `{{ score_local }}`, `{{ score_visitante }}`, `{{ minuto }}`
+          default: []
+          selector:
+            action:
+
+        equipo_gana_accion:
+          name: "🏆 Equipo gana — Acción"
+          description: >
+            Variables: `{{ equipo }}`, `{{ local }}`, `{{ visitante }}`,
+            `{{ score_local }}`, `{{ score_visitante }}`
+          default: []
+          selector:
+            action:
+
+# ------------------------------------------------------------------ #
+# VARIABLES                                                            #
+# ------------------------------------------------------------------ #
+
+variables:
+  _sensor_estado:    !input sensor_estado
+  _sensor_minuto:    !input sensor_minuto
+  _binary_favorable: !input binary_favorable
+  _switch_global:    !input switch_global
+  _switch_previo:    !input switch_previo_partido
+  _switch_tiempo:    !input switch_cambios_tiempo
+  _switch_gol:       !input switch_gol
+  _switch_gana:      !input switch_equipo_gana
+  _number_delay:     !input number_delay
+
+  equipo:          "{{ state_attr(_sensor_estado, 'team') | default('') }}"
+  local:           "{{ state_attr(_sensor_estado, 'local') | default(equipo) }}"
+  visitante:       "{{ state_attr(_sensor_estado, 'visitante') | default('') }}"
+  score_local:     "{{ state_attr(_sensor_estado, 'score_local') | default(0) }}"
+  score_visitante: "{{ state_attr(_sensor_estado, 'score_visitante') | default(0) }}"
+  minuto:          "{{ states(_sensor_minuto) | default('') }}"
+  resultado:       "{{ state_attr(_binary_favorable, 'resultado') | default('') }}"
+  fecha_partido:   "{{ state_attr(_sensor_estado, 'fecha') | default('') }}"
+  _delay_seg:      "{{ states(_number_delay) | int(0) }}"
+
+# ------------------------------------------------------------------ #
+# TRIGGERS                                                             #
+# ------------------------------------------------------------------ #
+
+trigger:
+
+  # T0 — 5 minutos antes: dispara exactamente a la hora del sensor datetime
+  - platform: time
+    at: !input sensor_datetime_5min
+    id: previo_partido
+
+  # T1 — Partido inicia
+  - platform: state
+    entity_id: !input sensor_estado
+    to: "En curso"
+    id: partido_inicia
+
+  # T2 — Medio tiempo
+  - platform: state
+    entity_id: !input sensor_minuto
+    to: "Entretiempo"
+    id: medio_tiempo
+
+  # T3 — Segundo tiempo
+  - platform: state
+    entity_id: !input sensor_minuto
+    from: "Entretiempo"
+    id: segundo_tiempo
+
+  # T4 — Partido termina
+  - platform: state
+    entity_id: !input sensor_estado
+    from: "En curso"
+    to: "Finalizado"
+    id: partido_termina
+
+  # T5 — Gol
+  - platform: state
+    entity_id: !input binary_gol
+    to: "on"
+    id: gol
+
+  # T6 — Equipo gana
+  - platform: state
+    entity_id: !input sensor_estado
+    from: "En curso"
+    to: "Finalizado"
+    id: equipo_gana
+
+# ------------------------------------------------------------------ #
+# CONDICIÓN GLOBAL                                                     #
+# ------------------------------------------------------------------ #
+
+condition:
+  - condition: state
+    entity_id: !input switch_global
+    state: "on"
+
+# ------------------------------------------------------------------ #
+# ACCIONES                                                             #
+# ------------------------------------------------------------------ #
+
+action:
+  - choose:
+
+      # ---- PREVIO AL PARTIDO ----
+      - conditions:
+          - condition: trigger
+            id: previo_partido
+          - condition: state
+            entity_id: !input switch_previo_partido
+            state: "on"
+        sequence:
+          - delay:
+              seconds: "{{ _delay_seg }}"
+          - sequence: !input previo_partido_accion
+
+      # ---- PARTIDO INICIA ----
+      - conditions:
+          - condition: trigger
+            id: partido_inicia
+          - condition: state
+            entity_id: !input switch_cambios_tiempo
+            state: "on"
+        sequence:
+          - delay:
+              seconds: "{{ _delay_seg }}"
+          - sequence: !input partido_inicia_accion
+
+      # ---- MEDIO TIEMPO ----
+      - conditions:
+          - condition: trigger
+            id: medio_tiempo
+          - condition: state
+            entity_id: !input switch_cambios_tiempo
+            state: "on"
+        sequence:
+          - delay:
+              seconds: "{{ _delay_seg }}"
+          - sequence: !input medio_tiempo_accion
+
+      # ---- SEGUNDO TIEMPO ----
+      - conditions:
+          - condition: trigger
+            id: segundo_tiempo
+          - condition: state
+            entity_id: !input switch_cambios_tiempo
+            state: "on"
+          - condition: state
+            entity_id: !input sensor_estado
+            state: "En curso"
+        sequence:
+          - delay:
+              seconds: "{{ _delay_seg }}"
+          - sequence: !input segundo_tiempo_accion
+
+      # ---- PARTIDO TERMINA ----
+      - conditions:
+          - condition: trigger
+            id: partido_termina
+          - condition: state
+            entity_id: !input switch_cambios_tiempo
+            state: "on"
+        sequence:
+          - delay:
+              seconds: "{{ _delay_seg }}"
+          - sequence: !input partido_termina_accion
+
+      # ---- GOL ----
+      - conditions:
+          - condition: trigger
+            id: gol
+          - condition: state
+            entity_id: !input switch_gol
+            state: "on"
+        sequence:
+          - delay:
+              seconds: "{{ _delay_seg }}"
+          - sequence: !input gol_accion
+
+      # ---- EQUIPO GANA ----
+      - conditions:
+          - condition: trigger
+            id: equipo_gana
+          - condition: state
+            entity_id: !input switch_equipo_gana
+            state: "on"
+          - condition: state
+            entity_id: !input binary_favorable
+            state: "on"
+        sequence:
+          - delay:
+              seconds: "{{ _delay_seg }}"
+          - sequence: !input equipo_gana_accion
+
+mode: parallel
+max: 5

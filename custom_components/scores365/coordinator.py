@@ -14,6 +14,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 
 from .const import (
     API_BASE_URL,
+    API_GAME_URL,
     API_PARAMS,
     CONF_COMPETITOR_ID,
     CONF_TEAM_NAME,
@@ -25,6 +26,7 @@ from .const import (
     MATCH_STATUS_NO_DATA,
     MATCH_STATUS_NO_MATCH,
     MAX_RETRIES,
+    PRE_MATCH_WINDOW,
     RESULT_DRAW,
     RESULT_LOSS,
     RESULT_WIN,
@@ -52,12 +54,14 @@ class Scores365Coordinator(DataUpdateCoordinator):
         self.team_logo_url  = LOGO_BASE_URL.format(competitor_id=self.competitor_id)
 
         # Estado interno
-        self._previous_score: int | None     = None
+        self._previous_score: int | None        = None
         self._goal_detected_at: datetime | None = None
-        self._is_live: bool                  = False
-        self._last_ttl: int                  = TTL_DEFAULT
-        self._consecutive_errors: int        = 0
-        self._last_valid_data: dict | None   = None   # caché del último dato bueno
+        self._is_live: bool                     = False
+        self._last_ttl: int                     = TTL_DEFAULT
+        self._consecutive_errors: int           = 0
+        self._last_valid_data: dict | None      = None
+        self._current_game_id: str | None       = None  # ID del partido en curso
+        self._next_start_time: datetime | None  = None  # startTime del próximo partido
 
         super().__init__(
             hass,
@@ -71,6 +75,8 @@ class Scores365Coordinator(DataUpdateCoordinator):
     # ------------------------------------------------------------------
 
     def _apply_ttl(self, raw_ttl: int | None, is_live: bool) -> int:
+        """Aplica límites al TTL. Si hay partido en curso usa API_GAME_URL
+        que es más estable, por lo que los límites son los mismos."""
         ttl = raw_ttl if (raw_ttl is not None and raw_ttl > 0) else TTL_DEFAULT
         if is_live:
             clamped = max(TTL_FLOOR_LIVE, min(ttl, TTL_CEILING_LIVE))
@@ -88,34 +94,69 @@ class Scores365Coordinator(DataUpdateCoordinator):
             _LOGGER.debug("%s: Próximo polling en %ss", self.team_name, seconds)
 
     def _backoff_interval(self) -> int:
-        """Calcula el intervalo de backoff exponencial según errores consecutivos."""
         delay = min(RETRY_BACKOFF_BASE * (2 ** (self._consecutive_errors - 1)),
                     RETRY_BACKOFF_MAX)
         _LOGGER.warning("%s: Error consecutivo #%s, reintentando en %ss",
                         self.team_name, self._consecutive_errors, delay)
         return delay
 
+    def _check_pre_match_window(self) -> bool:
+        """Devuelve True si estamos dentro de los PRE_MATCH_WINDOW segundos
+        antes del próximo partido — activa TTL agresivo de 1s."""
+        if self._next_start_time is None:
+            return False
+        now = datetime.now(timezone.utc)
+        # Asegurar que next_start_time tenga TZ
+        nst = self._next_start_time
+        if nst.tzinfo is None:
+            nst = nst.replace(tzinfo=timezone.utc)
+        seconds_until = (nst - now).total_seconds()
+        return 0 <= seconds_until <= PRE_MATCH_WINDOW
+
     # ------------------------------------------------------------------
-    # Fetch con retry
+    # Fetch con retry — URL dinámica según estado del partido
     # ------------------------------------------------------------------
 
     async def _async_update_data(self) -> dict[str, Any]:
         timestamp = int(time.time())
-        params = {**API_PARAMS, "competitors": self.competitor_id, "timestamp": timestamp}
+
+        # ── Ventana pre-partido: forzar TTL a 1s ──────────────────────
+        if not self._is_live and self._check_pre_match_window():
+            _LOGGER.debug("%s: Ventana pre-partido — TTL forzado a 1s", self.team_name)
+            self._set_interval(1)
+
+        # ── Elegir URL según estado ────────────────────────────────────
+        if self._is_live and self._current_game_id:
+            # Partido en curso → URL específica del partido (más estable)
+            url = API_GAME_URL
+            params = {
+                **API_PARAMS,
+                "gameId": self._current_game_id,
+                "timestamp": timestamp,
+            }
+            _LOGGER.debug("%s: Polling partido en curso gameId=%s",
+                          self.team_name, self._current_game_id)
+        else:
+            # Sin partido → URL general del equipo
+            url = API_BASE_URL
+            params = {
+                **API_PARAMS,
+                "competitors": self.competitor_id,
+                "timestamp": timestamp,
+            }
 
         last_err: Exception | None = None
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.get(
-                        API_BASE_URL,
+                        url,
                         params=params,
                         timeout=aiohttp.ClientTimeout(total=10),
                     ) as response:
                         response.raise_for_status()
                         raw = await response.json(content_type=None)
 
-                # Éxito — resetear contador de errores
                 self._consecutive_errors = 0
                 return self._parse_data(raw)
 
@@ -124,19 +165,18 @@ class Scores365Coordinator(DataUpdateCoordinator):
                 if attempt < MAX_RETRIES:
                     _LOGGER.debug("%s: Intento %s/%s falló (%s), reintentando…",
                                   self.team_name, attempt, MAX_RETRIES, err)
-                    await asyncio.sleep(2 * attempt)   # pequeño delay entre reintentos
+                    await asyncio.sleep(2 * attempt)
             except Exception as err:
                 last_err = err
-                break   # errores inesperados no se reintentan
+                break
 
         # Todos los intentos fallaron
         self._consecutive_errors += 1
         backoff = self._backoff_interval()
         self._set_interval(backoff)
 
-        # Devuelve último dato válido con flag de error en lugar de levantar excepción
         if self._last_valid_data is not None:
-            _LOGGER.warning("%s: Usando datos en caché (último dato válido)", self.team_name)
+            _LOGGER.warning("%s: Usando datos en caché", self.team_name)
             stale = dict(self._last_valid_data)
             stale["stale"] = True
             stale["error"] = str(last_err)
@@ -145,11 +185,16 @@ class Scores365Coordinator(DataUpdateCoordinator):
         raise UpdateFailed(f"{self.team_name}: Sin datos tras {MAX_RETRIES} intentos: {last_err}")
 
     # ------------------------------------------------------------------
-    # Parser
+    # Parser — maneja tanto games/current como game/ (partido específico)
     # ------------------------------------------------------------------
 
     def _parse_data(self, raw: dict) -> dict[str, Any]:
-        games   = raw.get("games", [])
+        # API_GAME_URL devuelve {"game": {...}} en lugar de {"games": [...]}
+        if "game" in raw and "games" not in raw:
+            games = [raw["game"]]
+        else:
+            games = raw.get("games", [])
+
         raw_ttl = raw.get("ttl")
 
         current_game = next_game = last_game = None
@@ -162,28 +207,45 @@ class Scores365Coordinator(DataUpdateCoordinator):
             elif sg == STATUS_GROUP_UPCOMING and next_game is None:
                 next_game = game
 
-        is_live      = current_game is not None
+        is_live       = current_game is not None
         self._is_live = is_live
+
+        # Guardar game_id del partido en curso para próximas requests
+        if current_game:
+            self._current_game_id = str(current_game.get("id", ""))
+        else:
+            self._current_game_id = None
+
+        # Guardar startTime del próximo partido para ventana pre-partido
+        if next_game and not is_live:
+            try:
+                st = next_game.get("startTime", "")
+                if st:
+                    self._next_start_time = datetime.fromisoformat(st)
+            except ValueError:
+                self._next_start_time = None
+        elif is_live:
+            self._next_start_time = None  # resetear cuando ya inició
 
         effective_ttl = self._apply_ttl(raw_ttl, is_live)
         self._last_ttl = effective_ttl
         self._set_interval(effective_ttl)
 
-        # Sin ningún partido en ningún estado → "Sin datos"
         has_data = any([current_game, next_game, last_game])
 
         result: dict[str, Any] = {
-            "is_live":    is_live,
-            "has_data":   has_data,
-            "current":    None,
-            "next":       None,
-            "last":       None,
-            "goal":       False,
-            "goal_team":  None,
-            "ttl":        effective_ttl,
-            "raw_ttl":    raw_ttl,
-            "stale":      False,
-            "error":      None,
+            "is_live":       is_live,
+            "has_data":      has_data,
+            "current":       None,
+            "next":          None,
+            "last":          None,
+            "goal":          False,
+            "goal_team":     None,
+            "ttl":           effective_ttl,
+            "raw_ttl":       raw_ttl,
+            "stale":         False,
+            "error":         None,
+            "game_id":       self._current_game_id,
         }
 
         # ---- Partido en curso ----
@@ -220,6 +282,7 @@ class Scores365Coordinator(DataUpdateCoordinator):
                 "status_text": current_game.get("statusText", ""),
                 "status":      MATCH_STATUS_LIVE,
                 "competition": current_game.get("competitionDisplayName", ""),
+                "game_id":     str(current_game.get("id", "")),
             }
             result["goal"]      = goal_active
             result["goal_team"] = self.team_name if goal_active else None
@@ -236,26 +299,24 @@ class Scores365Coordinator(DataUpdateCoordinator):
             if start_time_str:
                 try:
                     start_dt = datetime.fromisoformat(start_time_str)
-                    # datetime con TZ para el sensor tipo timestamp de HA
                     start_datetime_5min = start_dt - timedelta(minutes=5)
-                    # Asegurar que tenga timezone info
                     if start_datetime_5min.tzinfo is None:
                         from homeassistant.util import dt as dt_util
                         start_datetime_5min = dt_util.as_local(start_datetime_5min)
                 except ValueError:
                     pass
             result["next"] = {
-                "home_name":          home.get("name", ""),
-                "away_name":          away.get("name", ""),
-                "home_id":            str(home.get("id", "")),
-                "away_id":            str(away.get("id", "")),
-                "home_logo":          LOGO_BASE_URL.format(competitor_id=home.get("id", "")),
-                "away_logo":          LOGO_BASE_URL.format(competitor_id=away.get("id", "")),
-                "teams":              f"{home.get('name', '')} vs {away.get('name', '')}",
-                "start_time":         start_dt.strftime("%d de %B de %Y, %H:%M") if start_dt else start_time_str,
+                "home_name":           home.get("name", ""),
+                "away_name":           away.get("name", ""),
+                "home_id":             str(home.get("id", "")),
+                "away_id":             str(away.get("id", "")),
+                "home_logo":           LOGO_BASE_URL.format(competitor_id=home.get("id", "")),
+                "away_logo":           LOGO_BASE_URL.format(competitor_id=away.get("id", "")),
+                "teams":               f"{home.get('name', '')} vs {away.get('name', '')}",
+                "start_time":          start_dt.strftime("%d de %B de %Y, %H:%M") if start_dt else start_time_str,
                 "start_datetime_5min": start_datetime_5min,
-                "competition":        next_game.get("competitionDisplayName", ""),
-                "status":             MATCH_STATUS_NO_MATCH,
+                "competition":         next_game.get("competitionDisplayName", ""),
+                "status":              MATCH_STATUS_NO_MATCH,
             }
 
         # ---- Último partido ----
@@ -279,7 +340,6 @@ class Scores365Coordinator(DataUpdateCoordinator):
                 "status":      MATCH_STATUS_FINISHED,
             }
 
-        # Guardar como último dato válido
         self._last_valid_data = result
         return result
 
@@ -288,7 +348,6 @@ class Scores365Coordinator(DataUpdateCoordinator):
     # ------------------------------------------------------------------
 
     def _is_team(self, competitor: dict) -> bool:
-        """Devuelve True si el competitor es el equipo monitoreado."""
         return (
             str(competitor.get("id", "")) == self.competitor_id
             or self.team_name.lower() in competitor.get("name", "").lower()
@@ -310,7 +369,6 @@ class Scores365Coordinator(DataUpdateCoordinator):
             team_score, rival_score = away_score, home_score
         else:
             return RESULT_DRAW
-
         if team_score > rival_score:
             return RESULT_WIN
         elif team_score == rival_score:

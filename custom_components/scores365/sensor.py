@@ -80,7 +80,7 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
             name=self._team_name,
             manufacturer="365Scores",
             model="Fútbol en vivo",
-            sw_version="1.4.0",
+            sw_version="1.5.0",
             configuration_url="https://www.365scores.com",
         )
 

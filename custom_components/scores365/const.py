@@ -10,12 +10,16 @@ CONF_LEAGUE_NAME   = "league_name"
 
 # API
 API_BASE_URL = "https://webws.365scores.com/web/games/current/"
+API_GAME_URL = "https://webws.365scores.com/web/game/"   # usado durante partido en curso
 API_PARAMS = {
     "appTypeId": "5",
     "langId": "29",
     "timezoneName": "America/Mexico_City",
     "userCountryId": "31",
 }
+
+# Segundos antes del partido en que se activa el TTL agresivo
+PRE_MATCH_WINDOW = 30   # 30s antes → TTL forzado a 1s
 
 # Logo URL con fallback de imagen por defecto
 LOGO_BASE_URL = (
