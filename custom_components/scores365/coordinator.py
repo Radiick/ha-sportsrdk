@@ -9,7 +9,7 @@ from typing import Any
 
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
@@ -44,9 +44,17 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Modos de polling — usados en el sensor de diagnóstico
+POLL_MODE_IDLE       = "Sin partido"
+POLL_MODE_PRE_MATCH  = "Pre-partido (30s)"
+POLL_MODE_LIVE       = "Partido en curso"
+POLL_MODE_LIVE_GAME  = "Partido en curso (URL directa)"
+POLL_MODE_BACKOFF    = "Error — backoff"
+POLL_MODE_WAKEUP     = "Alarma pre-partido"
+
 
 class Scores365Coordinator(DataUpdateCoordinator):
-    """Coordinator con TTL dinámico, retry con backoff y caché del último dato válido."""
+    """Coordinator con TTL dinámico, alarma exacta pre-partido y sensor de modo."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.competitor_id  = entry.data[CONF_COMPETITOR_ID]
@@ -60,8 +68,13 @@ class Scores365Coordinator(DataUpdateCoordinator):
         self._last_ttl: int                     = TTL_DEFAULT
         self._consecutive_errors: int           = 0
         self._last_valid_data: dict | None      = None
-        self._current_game_id: str | None       = None  # ID del partido en curso
-        self._next_start_time: datetime | None  = None  # startTime del próximo partido
+        self._current_game_id: str | None       = None
+        self._next_start_time: datetime | None  = None
+        self._wakeup_handle: asyncio.TimerHandle | None = None
+        self._wakeup_scheduled_for: datetime | None     = None
+
+        # Modo de polling actual — expuesto en sensor de diagnóstico
+        self.poll_mode: str = POLL_MODE_IDLE
 
         super().__init__(
             hass,
@@ -71,12 +84,63 @@ class Scores365Coordinator(DataUpdateCoordinator):
         )
 
     # ------------------------------------------------------------------
+    # Alarma pre-partido
+    # ------------------------------------------------------------------
+
+    def _schedule_pre_match_wakeup(self, start_dt: datetime) -> None:
+        """Programa una alarma exacta PRE_MATCH_WINDOW segundos antes del partido."""
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=timezone.utc)
+
+        wakeup_at = start_dt - timedelta(seconds=PRE_MATCH_WINDOW)
+        now = datetime.now(timezone.utc)
+        delay = (wakeup_at - now).total_seconds()
+
+        # Si ya pasó la ventana o el partido ya inició, no programar
+        if delay <= 0:
+            return
+
+        # Si ya hay una alarma programada para la misma hora, no reprogramar
+        if (self._wakeup_scheduled_for is not None
+                and abs((self._wakeup_scheduled_for - wakeup_at).total_seconds()) < 5):
+            return
+
+        # Cancelar alarma anterior si existe
+        self._cancel_wakeup()
+
+        _LOGGER.debug(
+            "%s: Alarma pre-partido programada en %.0fs (a las %s)",
+            self.team_name, delay, wakeup_at.strftime("%H:%M:%S"),
+        )
+
+        self._wakeup_handle = self.hass.loop.call_later(
+            delay, self._on_pre_match_wakeup
+        )
+        self._wakeup_scheduled_for = wakeup_at
+
+    def _cancel_wakeup(self) -> None:
+        """Cancela la alarma pre-partido si existe."""
+        if self._wakeup_handle is not None:
+            self._wakeup_handle.cancel()
+            self._wakeup_handle = None
+            self._wakeup_scheduled_for = None
+
+    @callback
+    def _on_pre_match_wakeup(self) -> None:
+        """Callback cuando la alarma pre-partido se dispara."""
+        self._wakeup_handle = None
+        self._wakeup_scheduled_for = None
+        _LOGGER.debug("%s: ⏰ Alarma pre-partido disparada — activando TTL 1s", self.team_name)
+        self.poll_mode = POLL_MODE_WAKEUP
+        self._set_interval(1)
+        # Forzar refresh inmediato
+        self.hass.async_create_task(self.async_refresh())
+
+    # ------------------------------------------------------------------
     # TTL helpers
     # ------------------------------------------------------------------
 
     def _apply_ttl(self, raw_ttl: int | None, is_live: bool) -> int:
-        """Aplica límites al TTL. Si hay partido en curso usa API_GAME_URL
-        que es más estable, por lo que los límites son los mismos."""
         ttl = raw_ttl if (raw_ttl is not None and raw_ttl > 0) else TTL_DEFAULT
         if is_live:
             clamped = max(TTL_FLOOR_LIVE, min(ttl, TTL_CEILING_LIVE))
@@ -101,12 +165,10 @@ class Scores365Coordinator(DataUpdateCoordinator):
         return delay
 
     def _check_pre_match_window(self) -> bool:
-        """Devuelve True si estamos dentro de los PRE_MATCH_WINDOW segundos
-        antes del próximo partido — activa TTL agresivo de 1s."""
+        """True si estamos en la ventana de PRE_MATCH_WINDOW segundos antes del partido."""
         if self._next_start_time is None:
             return False
         now = datetime.now(timezone.utc)
-        # Asegurar que next_start_time tenga TZ
         nst = self._next_start_time
         if nst.tzinfo is None:
             nst = nst.replace(tzinfo=timezone.utc)
@@ -114,45 +176,38 @@ class Scores365Coordinator(DataUpdateCoordinator):
         return 0 <= seconds_until <= PRE_MATCH_WINDOW
 
     # ------------------------------------------------------------------
-    # Fetch con retry — URL dinámica según estado del partido
+    # Fetch con retry
     # ------------------------------------------------------------------
 
     async def _async_update_data(self) -> dict[str, Any]:
         timestamp = int(time.time())
 
-        # ── Ventana pre-partido: forzar TTL a 1s ──────────────────────
-        if not self._is_live and self._check_pre_match_window():
-            _LOGGER.debug("%s: Ventana pre-partido — TTL forzado a 1s", self.team_name)
-            self._set_interval(1)
-
-        # ── Elegir URL según estado ────────────────────────────────────
+        # Determinar modo de polling y URL
         if self._is_live and self._current_game_id:
-            # Partido en curso → URL específica del partido (más estable)
             url = API_GAME_URL
-            params = {
-                **API_PARAMS,
-                "gameId": self._current_game_id,
-                "timestamp": timestamp,
-            }
-            _LOGGER.debug("%s: Polling partido en curso gameId=%s",
-                          self.team_name, self._current_game_id)
-        else:
-            # Sin partido → URL general del equipo
+            params = {**API_PARAMS, "gameId": self._current_game_id, "timestamp": timestamp}
+            self.poll_mode = POLL_MODE_LIVE_GAME
+            _LOGGER.debug("%s: Polling gameId=%s", self.team_name, self._current_game_id)
+
+        elif not self._is_live and self._check_pre_match_window():
+            # Ventana pre-partido activa (llegamos aquí via alarma o polling normal)
             url = API_BASE_URL
-            params = {
-                **API_PARAMS,
-                "competitors": self.competitor_id,
-                "timestamp": timestamp,
-            }
+            params = {**API_PARAMS, "competitors": self.competitor_id, "timestamp": timestamp}
+            self.poll_mode = POLL_MODE_PRE_MATCH
+            self._set_interval(1)
+            _LOGGER.debug("%s: Polling pre-partido (ventana 30s)", self.team_name)
+
+        else:
+            url = API_BASE_URL
+            params = {**API_PARAMS, "competitors": self.competitor_id, "timestamp": timestamp}
+            self.poll_mode = POLL_MODE_IDLE
 
         last_err: Exception | None = None
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.get(
-                        url,
-                        params=params,
-                        timeout=aiohttp.ClientTimeout(total=10),
+                        url, params=params, timeout=aiohttp.ClientTimeout(total=10)
                     ) as response:
                         response.raise_for_status()
                         raw = await response.json(content_type=None)
@@ -170,8 +225,8 @@ class Scores365Coordinator(DataUpdateCoordinator):
                 last_err = err
                 break
 
-        # Todos los intentos fallaron
         self._consecutive_errors += 1
+        self.poll_mode = POLL_MODE_BACKOFF
         backoff = self._backoff_interval()
         self._set_interval(backoff)
 
@@ -180,16 +235,16 @@ class Scores365Coordinator(DataUpdateCoordinator):
             stale = dict(self._last_valid_data)
             stale["stale"] = True
             stale["error"] = str(last_err)
+            stale["poll_mode"] = self.poll_mode
             return stale
 
         raise UpdateFailed(f"{self.team_name}: Sin datos tras {MAX_RETRIES} intentos: {last_err}")
 
     # ------------------------------------------------------------------
-    # Parser — maneja tanto games/current como game/ (partido específico)
+    # Parser
     # ------------------------------------------------------------------
 
     def _parse_data(self, raw: dict) -> dict[str, Any]:
-        # API_GAME_URL devuelve {"game": {...}} en lugar de {"games": [...]}
         if "game" in raw and "games" not in raw:
             games = [raw["game"]]
         else:
@@ -210,42 +265,60 @@ class Scores365Coordinator(DataUpdateCoordinator):
         is_live       = current_game is not None
         self._is_live = is_live
 
-        # Guardar game_id del partido en curso para próximas requests
+        # Guardar game_id
         if current_game:
             self._current_game_id = str(current_game.get("id", ""))
         else:
             self._current_game_id = None
 
-        # Guardar startTime del próximo partido para ventana pre-partido
+        # Gestionar startTime y alarma pre-partido
         if next_game and not is_live:
             try:
                 st = next_game.get("startTime", "")
                 if st:
-                    self._next_start_time = datetime.fromisoformat(st)
+                    new_start = datetime.fromisoformat(st)
+                    # Reprogramar alarma solo si cambió la hora del partido
+                    if (self._next_start_time is None
+                            or abs((new_start - self._next_start_time).total_seconds()) > 5):
+                        self._next_start_time = new_start
+                        self._schedule_pre_match_wakeup(new_start)
             except ValueError:
                 self._next_start_time = None
         elif is_live:
-            self._next_start_time = None  # resetear cuando ya inició
+            # Partido ya inició — cancelar alarma y resetear
+            self._cancel_wakeup()
+            self._next_start_time = None
 
-        effective_ttl = self._apply_ttl(raw_ttl, is_live)
-        self._last_ttl = effective_ttl
-        self._set_interval(effective_ttl)
+        # Actualizar modo de polling
+        if is_live:
+            self.poll_mode = POLL_MODE_LIVE_GAME if self._current_game_id else POLL_MODE_LIVE
+        elif self._check_pre_match_window():
+            self.poll_mode = POLL_MODE_PRE_MATCH
+
+        # TTL normal (no sobreescribe si estamos en pre-partido o backoff)
+        if self.poll_mode not in (POLL_MODE_PRE_MATCH, POLL_MODE_WAKEUP, POLL_MODE_BACKOFF):
+            effective_ttl = self._apply_ttl(raw_ttl, is_live)
+            self._last_ttl = effective_ttl
+            self._set_interval(effective_ttl)
+        else:
+            effective_ttl = int(self.update_interval.total_seconds())
 
         has_data = any([current_game, next_game, last_game])
 
         result: dict[str, Any] = {
-            "is_live":       is_live,
-            "has_data":      has_data,
-            "current":       None,
-            "next":          None,
-            "last":          None,
-            "goal":          False,
-            "goal_team":     None,
-            "ttl":           effective_ttl,
-            "raw_ttl":       raw_ttl,
-            "stale":         False,
-            "error":         None,
-            "game_id":       self._current_game_id,
+            "is_live":    is_live,
+            "has_data":   has_data,
+            "current":    None,
+            "next":       None,
+            "last":       None,
+            "goal":       False,
+            "goal_team":  None,
+            "ttl":        effective_ttl,
+            "raw_ttl":    raw_ttl,
+            "stale":      False,
+            "error":      None,
+            "game_id":    self._current_game_id,
+            "poll_mode":  self.poll_mode,
         }
 
         # ---- Partido en curso ----

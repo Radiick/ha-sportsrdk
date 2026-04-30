@@ -33,6 +33,7 @@ SENSOR_DEFINITIONS = [
     ("estado_partido",       "Estado del Partido",     "mdi:soccer-field",       None),
     ("competicion",          "Competición",            "mdi:trophy",             EntityCategory.DIAGNOSTIC),
     ("ttl_actual",           "TTL de Polling",         "mdi:refresh",            EntityCategory.DIAGNOSTIC),
+    ("modo_polling",         "Modo de Polling",        "mdi:radar",              EntityCategory.DIAGNOSTIC),
     ("proximo_equipos",      "Próximo: Equipos",       "mdi:calendar-clock",     None),
     ("proximo_fecha",        "Próximo: Fecha",         "mdi:calendar",           None),
     ("proximo_datetime_5min","Próximo: -5min",         "mdi:clock-alert-outline",None),
@@ -130,6 +131,8 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
                 return last.get("competition") if last else None
             case "ttl_actual":
                 return data.get("ttl")
+            case "modo_polling":
+                return data.get("poll_mode", self.coordinator.poll_mode)
             case "proximo_equipos":
                 return nxt["teams"] if nxt else None
             case "proximo_fecha":
@@ -183,6 +186,17 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
 
         if self._sensor_type == "ttl_actual":
             attrs["raw_ttl_api"] = data.get("raw_ttl")
+
+        if self._sensor_type == "modo_polling":
+            coord = self.coordinator
+            attrs.update({
+                "ttl_actual":        data.get("ttl"),
+                "raw_ttl_api":       data.get("raw_ttl"),
+                "game_id":           data.get("game_id", ""),
+                "errores_seguidos":  coord._consecutive_errors,
+                "alarma_programada": str(coord._wakeup_scheduled_for) if coord._wakeup_scheduled_for else "No",
+                "proximo_inicio":    str(coord._next_start_time) if coord._next_start_time else "No",
+            })
 
         if self._sensor_type == "proximo_equipos" and nxt:
             attrs.update({
