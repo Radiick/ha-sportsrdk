@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
@@ -189,13 +190,19 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
 
         if self._sensor_type == "modo_polling":
             coord = self.coordinator
+            restante = None
+            if coord._pre_match_active and coord._pre_match_activated_at:
+                elapsed = (datetime.now(timezone.utc) - coord._pre_match_activated_at).total_seconds()
+                restante = max(0, int(300 - elapsed))
             attrs.update({
-                "ttl_actual":        data.get("ttl"),
-                "raw_ttl_api":       data.get("raw_ttl"),
-                "game_id":           data.get("game_id", ""),
-                "errores_seguidos":  coord._consecutive_errors,
-                "alarma_programada": str(coord._wakeup_scheduled_for) if coord._wakeup_scheduled_for else "No",
-                "proximo_inicio":    str(coord._next_start_time) if coord._next_start_time else "No",
+                "ttl_actual":            data.get("ttl"),
+                "raw_ttl_api":           data.get("raw_ttl"),
+                "game_id":               data.get("game_id", ""),
+                "errores_seguidos":      coord._consecutive_errors,
+                "alarma_programada":     str(coord._wakeup_scheduled_for) if coord._wakeup_scheduled_for else "No",
+                "proximo_inicio":        str(coord._next_start_time) if coord._next_start_time else "No",
+                "pre_partido_activo":    coord._pre_match_active,
+                "pre_partido_restante":  f"{restante}s" if restante is not None else "No",
             })
 
         if self._sensor_type == "proximo_equipos" and nxt:

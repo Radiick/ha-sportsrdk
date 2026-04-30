@@ -72,6 +72,8 @@ class Scores365Coordinator(DataUpdateCoordinator):
         self._next_start_time: datetime | None  = None
         self._wakeup_handle: asyncio.TimerHandle | None = None
         self._wakeup_scheduled_for: datetime | None     = None
+        self._pre_match_active: bool                    = False   # TTL corto activo
+        self._pre_match_activated_at: datetime | None   = None    # cuándo se activó
 
         # Modo de polling actual — expuesto en sensor de diagnóstico
         self.poll_mode: str = POLL_MODE_IDLE
@@ -130,10 +132,11 @@ class Scores365Coordinator(DataUpdateCoordinator):
         """Callback cuando la alarma pre-partido se dispara."""
         self._wakeup_handle = None
         self._wakeup_scheduled_for = None
-        _LOGGER.debug("%s: ⏰ Alarma pre-partido disparada — activando TTL 1s", self.team_name)
+        _LOGGER.debug("%s: ⏰ Alarma pre-partido disparada — activando TTL 1s por 5 min", self.team_name)
+        self._pre_match_active = True
+        self._pre_match_activated_at = datetime.now(timezone.utc)
         self.poll_mode = POLL_MODE_WAKEUP
         self._set_interval(1)
-        # Forzar refresh inmediato
         self.hass.async_create_task(self.async_refresh())
 
     # ------------------------------------------------------------------
@@ -175,6 +178,25 @@ class Scores365Coordinator(DataUpdateCoordinator):
         seconds_until = (nst - now).total_seconds()
         return 0 <= seconds_until <= PRE_MATCH_WINDOW
 
+    def _is_pre_match_ttl_active(self) -> bool:
+        """True si el TTL corto pre-partido debe mantenerse.
+
+        Se activa con la alarma y se mantiene hasta que:
+        - El partido inicia (is_live = True), o
+        - Han pasado más de 5 minutos desde la activación
+        """
+        if not self._pre_match_active:
+            return False
+        if self._pre_match_activated_at is None:
+            return False
+        elapsed = (datetime.now(timezone.utc) - self._pre_match_activated_at).total_seconds()
+        if elapsed > 300:  # 5 minutos máximo
+            _LOGGER.debug("%s: TTL pre-partido expiró (5 min)", self.team_name)
+            self._pre_match_active = False
+            self._pre_match_activated_at = None
+            return False
+        return True
+
     # ------------------------------------------------------------------
     # Fetch con retry
     # ------------------------------------------------------------------
@@ -189,13 +211,13 @@ class Scores365Coordinator(DataUpdateCoordinator):
             self.poll_mode = POLL_MODE_LIVE_GAME
             _LOGGER.debug("%s: Polling gameId=%s", self.team_name, self._current_game_id)
 
-        elif not self._is_live and self._check_pre_match_window():
-            # Ventana pre-partido activa (llegamos aquí via alarma o polling normal)
+        elif not self._is_live and (self._is_pre_match_ttl_active() or self._check_pre_match_window()):
+            # TTL corto activo: por alarma (hasta 5 min) o por ventana de 30s
             url = API_BASE_URL
             params = {**API_PARAMS, "competitors": self.competitor_id, "timestamp": timestamp}
             self.poll_mode = POLL_MODE_PRE_MATCH
             self._set_interval(1)
-            _LOGGER.debug("%s: Polling pre-partido (ventana 30s)", self.team_name)
+            _LOGGER.debug("%s: Polling pre-partido (TTL 1s activo)", self.team_name)
 
         else:
             url = API_BASE_URL
@@ -285,9 +307,11 @@ class Scores365Coordinator(DataUpdateCoordinator):
             except ValueError:
                 self._next_start_time = None
         elif is_live:
-            # Partido ya inició — cancelar alarma y resetear
+            # Partido ya inició — cancelar alarma y resetear flag pre-partido
             self._cancel_wakeup()
             self._next_start_time = None
+            self._pre_match_active = False
+            self._pre_match_activated_at = None
 
         # Actualizar modo de polling
         if is_live:
