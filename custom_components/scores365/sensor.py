@@ -17,6 +17,7 @@ from .const import (
     CONF_COMPETITOR_ID,
     CONF_TEAM_NAME,
     DOMAIN,
+    LOGO_BASE_URL,
     MATCH_STATUS_NO_DATA,
     MATCH_STATUS_NO_MATCH,
 )
@@ -26,6 +27,7 @@ _LOGGER = logging.getLogger(__name__)
 
 SENSOR_DEFINITIONS = [
     # (sensor_type, friendly_name, icon, entity_category)
+    ("logo_equipo",          "Logo del Equipo",        "mdi:shield-account",     EntityCategory.DIAGNOSTIC),
     ("marcador_local",       "Marcador Local",         "mdi:scoreboard",         None),
     ("marcador_visitante",   "Marcador Visitante",     "mdi:scoreboard",         None),
     ("equipo_local",         "Equipo Local",           "mdi:shield",             None),
@@ -89,6 +91,8 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
     @property
     def entity_picture(self) -> str | None:
         """Logo del equipo local o visitante según el sensor, tomado del partido actual."""
+        if self._sensor_type == "logo_equipo":
+            return LOGO_BASE_URL.format(competitor_id=self._competitor_id)
         data = self.coordinator.data
         if not data:
             return None
@@ -101,6 +105,9 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self) -> Any:
+        if self._sensor_type == "logo_equipo":
+            return self._team_name
+
         data = self.coordinator.data
         if not data:
             return None
