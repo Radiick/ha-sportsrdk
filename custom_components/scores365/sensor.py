@@ -88,9 +88,15 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
             configuration_url="https://www.365scores.com",
         )
 
+    # Sensores de "próximo" y "último" partido muestran el logo del rival
+    _RIVAL_LOGO_SENSORS = (
+        "proximo_equipos", "proximo_fecha", "proximo_liga",
+        "ultimo_equipos", "ultimo_marcador", "ultimo_resultado",
+    )
+
     @property
     def entity_picture(self) -> str | None:
-        """Logo del equipo local o visitante según el sensor, tomado del partido actual."""
+        """Logo según el sensor: propio equipo, local/visitante del partido en curso, o rival."""
         if self._sensor_type == "logo_equipo":
             return LOGO_BASE_URL.format(competitor_id=self._competitor_id)
         data = self.coordinator.data
@@ -101,6 +107,9 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
             return current.get("home_logo") if current else None
         if self._sensor_type == "equipo_visitante":
             return current.get("away_logo") if current else None
+        if self._sensor_type in self._RIVAL_LOGO_SENSORS:
+            source = data.get("next") if self._sensor_type.startswith("proximo") else data.get("last")
+            return source.get("rival_logo") if source else None
         return None
 
     @property
@@ -221,6 +230,8 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
                 "liga":             nxt.get("competition", ""),
                 "logo_local":       nxt.get("home_logo", ""),
                 "logo_visitante":   nxt.get("away_logo", ""),
+                "rival":            nxt.get("rival_name", ""),
+                "logo_rival":       nxt.get("rival_logo", ""),
             })
 
         if self._sensor_type == "ultimo_marcador" and last:
@@ -234,6 +245,8 @@ class Scores365Sensor(CoordinatorEntity, SensorEntity):
                 "liga":            last.get("competition", ""),
                 "logo_local":      last.get("home_logo", ""),
                 "logo_visitante":  last.get("away_logo", ""),
+                "rival":           last.get("rival_name", ""),
+                "logo_rival":      last.get("rival_logo", ""),
             })
 
         return attrs

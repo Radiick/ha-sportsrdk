@@ -402,6 +402,7 @@ class Scores365Coordinator(DataUpdateCoordinator):
                         start_datetime_5min = dt_util.as_local(start_datetime_5min)
                 except ValueError:
                     pass
+            rival_name, rival_logo = self._get_rival(home, away)
             result["next"] = {
                 "home_name":           home.get("name", ""),
                 "away_name":           away.get("name", ""),
@@ -409,6 +410,8 @@ class Scores365Coordinator(DataUpdateCoordinator):
                 "away_id":             str(away.get("id", "")),
                 "home_logo":           LOGO_BASE_URL.format(competitor_id=home.get("id", "")),
                 "away_logo":           LOGO_BASE_URL.format(competitor_id=away.get("id", "")),
+                "rival_name":          rival_name,
+                "rival_logo":          rival_logo,
                 "teams":               f"{home.get('name', '')} vs {away.get('name', '')}",
                 "start_time":          start_dt.strftime("%d de %B de %Y, %H:%M") if start_dt else start_time_str,
                 "start_datetime_5min": start_datetime_5min,
@@ -421,6 +424,7 @@ class Scores365Coordinator(DataUpdateCoordinator):
             home = last_game["homeCompetitor"]
             away = last_game["awayCompetitor"]
             result_text = self._calculate_result(home, away)
+            rival_name, rival_logo = self._get_rival(home, away)
             result["last"] = {
                 "home_name":   home.get("name", ""),
                 "away_name":   away.get("name", ""),
@@ -428,6 +432,8 @@ class Scores365Coordinator(DataUpdateCoordinator):
                 "away_id":     str(away.get("id", "")),
                 "home_logo":   LOGO_BASE_URL.format(competitor_id=home.get("id", "")),
                 "away_logo":   LOGO_BASE_URL.format(competitor_id=away.get("id", "")),
+                "rival_name":  rival_name,
+                "rival_logo":  rival_logo,
                 "home_score":  int(home.get("score", 0)),
                 "away_score":  int(away.get("score", 0)),
                 "teams":       f"{home.get('name', '')} vs {away.get('name', '')}",
@@ -457,6 +463,14 @@ class Scores365Coordinator(DataUpdateCoordinator):
         if self._is_team(away):
             return int(away.get("score", 0))
         return None
+
+    def _get_rival(self, home: dict, away: dict) -> tuple[str, str]:
+        """Devuelve (nombre, logo) del rival — el competitor que no es el equipo monitoreado."""
+        rival = away if self._is_team(home) else home
+        return (
+            rival.get("name", ""),
+            LOGO_BASE_URL.format(competitor_id=rival.get("id", "")),
+        )
 
     def _calculate_result(self, home: dict, away: dict) -> str:
         home_score, away_score = int(home.get("score", 0)), int(away.get("score", 0))
