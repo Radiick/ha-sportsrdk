@@ -164,13 +164,16 @@ automation:
 
 ---
 
-## v1.6.2 — Novedades
+## v1.6.4 — Novedades
 
 ### Nueva entidad por equipo
 
 | Entidad | Descripción |
 |---|---|
 | `button.[equipo]_actualizar_ahora` | Fuerza una consulta inmediata a la API sin alterar el TTL de polling normal |
+
+### Otras mejoras
+- Los sensores de próximo y último partido ahora muestran el logo del **rival**, no del propio equipo
 
 ---
 
