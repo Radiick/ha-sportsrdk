@@ -1,7 +1,7 @@
 """Constantes para la integración 365Scores."""
 
 DOMAIN = "scores365"
-PLATFORMS = ["sensor", "binary_sensor", "switch", "number"]
+PLATFORMS = ["sensor", "binary_sensor", "switch", "number", "button"]
 
 # Config keys
 CONF_COMPETITOR_ID = "competitor_id"
@@ -76,6 +76,9 @@ SWITCHES_DEPENDIENTES = [
 
 # Number keys
 NUMBER_DELAY = "delay_automatizacion"
+
+# Button keys
+BUTTON_REFRESH = "actualizar_ahora"
 
 # Delay slider
 DELAY_MIN     = 0

@@ -164,6 +164,16 @@ automation:
 
 ---
 
+## v1.6.2 — Novedades
+
+### Nueva entidad por equipo
+
+| Entidad | Descripción |
+|---|---|
+| `button.[equipo]_actualizar_ahora` | Fuerza una consulta inmediata a la API sin alterar el TTL de polling normal |
+
+---
+
 ## Ejemplo completo con switches y delay
 
 ```yaml
