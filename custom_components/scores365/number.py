@@ -6,20 +6,11 @@ import logging
 from homeassistant.components.number import NumberEntity, NumberMode
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from .const import (
-    CONF_COMPETITOR_ID,
-    CONF_TEAM_NAME,
-    DELAY_DEFAULT,
-    DELAY_MAX,
-    DELAY_MIN,
-    DELAY_STEP,
-    DOMAIN,
-    NUMBER_DELAY,
-)
+from .const import DELAY_DEFAULT, DELAY_MAX, DELAY_MIN, DELAY_STEP, NUMBER_DELAY
+from .entity import Scores365EntityMixin
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,7 +23,7 @@ async def async_setup_entry(
     async_add_entities([Scores365DelayNumber(entry)])
 
 
-class Scores365DelayNumber(RestoreEntity, NumberEntity):
+class Scores365DelayNumber(Scores365EntityMixin, RestoreEntity, NumberEntity):
     """
     Slider de 0 a 60 segundos para agregar delay a automatizaciones.
 
@@ -44,10 +35,9 @@ class Scores365DelayNumber(RestoreEntity, NumberEntity):
     """
 
     def __init__(self, entry: ConfigEntry) -> None:
-        self._team_name       = entry.data[CONF_TEAM_NAME]
-        self._competitor_id   = entry.data[CONF_COMPETITOR_ID]
+        self._init_common(entry)
         self._attr_name       = f"{self._team_name} Delay Automatización"
-        self._attr_unique_id  = f"{DOMAIN}_{self._competitor_id}_{NUMBER_DELAY}"
+        self._attr_unique_id  = self._build_unique_id(NUMBER_DELAY)
         self._attr_icon       = "mdi:timer-sand"
         self._attr_native_min_value  = DELAY_MIN
         self._attr_native_max_value  = DELAY_MAX
@@ -69,21 +59,14 @@ class Scores365DelayNumber(RestoreEntity, NumberEntity):
                 self._current_value = float(DELAY_DEFAULT)
 
     @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._competitor_id)},
-            name=self._team_name,
-            manufacturer="365Scores",
-            model="Fútbol en vivo",
-            sw_version="1.5.0",
-        )
-
-    @property
     def native_value(self) -> float:
         return self._current_value
 
     @property
     def available(self) -> bool:
+        """Siempre disponible: es una preferencia local (RestoreEntity), no
+        depende de la salud de la API — el usuario debe poder ajustar este
+        valor incluso si 365Scores está caído."""
         return True
 
     @property

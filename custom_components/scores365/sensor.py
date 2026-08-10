@@ -9,19 +9,12 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import (
-    CONF_COMPETITOR_ID,
-    CONF_TEAM_NAME,
-    DOMAIN,
-    LOGO_BASE_URL,
-    MATCH_STATUS_NO_DATA,
-    MATCH_STATUS_NO_MATCH,
-)
+from .const import DOMAIN, LOGO_BASE_URL, MATCH_STATUS_NO_DATA, MATCH_STATUS_NO_MATCH
 from .coordinator import Scores365Coordinator
+from .entity import Scores365EntityMixin
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,34 +52,22 @@ async def async_setup_entry(
     ])
 
 
-class Scores365Sensor(CoordinatorEntity, SensorEntity):
+class Scores365Sensor(Scores365EntityMixin, CoordinatorEntity, SensorEntity):
 
     def __init__(self, coordinator: Scores365Coordinator, entry: ConfigEntry,
                  sensor_type: str, friendly_name: str, icon: str,
                  entity_category: EntityCategory | None) -> None:
         super().__init__(coordinator)
+        self._init_common(entry)
         self._sensor_type           = sensor_type
-        self._team_name             = entry.data[CONF_TEAM_NAME]
-        self._competitor_id         = entry.data[CONF_COMPETITOR_ID]
         self._attr_name             = f"{self._team_name} {friendly_name}"
-        self._attr_unique_id        = f"{DOMAIN}_{self._competitor_id}_{sensor_type}"
+        self._attr_unique_id        = self._build_unique_id(sensor_type)
         self._attr_icon             = icon
         self._attr_entity_category  = entity_category
         # El sensor de datetime necesita device_class TIMESTAMP para que
         # platform: time en el blueprint lo reconozca como hora de disparo
         if sensor_type == "proximo_datetime_5min":
             self._attr_device_class = SensorDeviceClass.TIMESTAMP
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._competitor_id)},
-            name=self._team_name,
-            manufacturer="365Scores",
-            model="Fútbol en vivo",
-            sw_version="1.5.0",
-            configuration_url="https://www.365scores.com",
-        )
 
     # Sensores de "próximo" y "último" partido muestran el logo del rival
     _RIVAL_LOGO_SENSORS = (

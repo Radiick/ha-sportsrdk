@@ -17,7 +17,8 @@
     },
     "error": {
       "invalid_id": "El ID debe ser un número. Ej: 1255",
-      "cannot_connect": "No se pudo verificar el equipo en 365Scores. Revisa el ID e intenta de nuevo."
+      "cannot_connect": "No se pudo verificar el equipo en 365Scores. Revisa el ID e intenta de nuevo.",
+      "already_configured": "Este equipo ya está configurado."
     },
     "abort": {
       "already_configured": "Este equipo ya está configurado en Home Assistant."
@@ -31,6 +32,23 @@
           "league_name": "Liga (referencia)"
         }
       }
+    }
+  },
+  "issues": {
+    "api_unreachable": {
+      "title": "365Scores: No se puede conectar a la API",
+      "description": "La integración de {team_name} no ha podido obtener datos de 365scores.com tras varios intentos consecutivos. Verifica tu conexión a internet o el estado de 365scores.com. Este aviso se resolverá automáticamente cuando la conexión se restablezca."
+    }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "previo_partido": "5 minutos antes del partido",
+      "partido_inicia": "Partido inicia",
+      "medio_tiempo": "Medio tiempo",
+      "segundo_tiempo": "Inicia el segundo tiempo",
+      "partido_termina": "Partido termina",
+      "gol": "Gol",
+      "equipo_gana": "Equipo gana"
     }
   }
 }

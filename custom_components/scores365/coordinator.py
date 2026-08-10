@@ -10,7 +10,10 @@ from typing import Any
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .const import (
     API_BASE_URL,
@@ -27,6 +30,7 @@ from .const import (
     MATCH_STATUS_NO_MATCH,
     MAX_RETRIES,
     PRE_MATCH_WINDOW,
+    REPAIR_ISSUE_ERROR_THRESHOLD,
     RESULT_DRAW,
     RESULT_LOSS,
     RESULT_WIN,
@@ -167,6 +171,13 @@ class Scores365Coordinator(DataUpdateCoordinator):
                         self.team_name, self._consecutive_errors, delay)
         return delay
 
+    # NOTA (auditoría 2026-08): esta función se reevalúa en cada ciclo de
+    # polling — incluyendo el primer refresh tras un reinicio de HA, que
+    # DataUpdateCoordinator ejecuta de forma inmediata y síncrona en
+    # async_config_entry_first_refresh(). Por lo tanto, si HA se reinicia
+    # dentro de la ventana de PRE_MATCH_WINDOW, el TTL agresivo se reactiva
+    # solo, sin necesitar persistencia de la alarma (_wakeup_handle).
+    # Verificado: no se requiere cambio funcional aquí.
     def _check_pre_match_window(self) -> bool:
         """True si estamos en la ventana de PRE_MATCH_WINDOW segundos antes del partido."""
         if self._next_start_time is None:
@@ -224,17 +235,18 @@ class Scores365Coordinator(DataUpdateCoordinator):
             params = {**API_PARAMS, "competitors": self.competitor_id, "timestamp": timestamp}
             self.poll_mode = POLL_MODE_IDLE
 
+        session = async_get_clientsession(self.hass)
         last_err: Exception | None = None
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(
-                        url, params=params, timeout=aiohttp.ClientTimeout(total=10)
-                    ) as response:
-                        response.raise_for_status()
-                        raw = await response.json(content_type=None)
+                async with session.get(
+                    url, params=params, timeout=aiohttp.ClientTimeout(total=10)
+                ) as response:
+                    response.raise_for_status()
+                    raw = await response.json(content_type=None)
 
                 self._consecutive_errors = 0
+                ir.async_delete_issue(self.hass, DOMAIN, f"api_unreachable_{self.competitor_id}")
                 return self._parse_data(raw)
 
             except (aiohttp.ClientError, asyncio.TimeoutError) as err:
@@ -251,6 +263,17 @@ class Scores365Coordinator(DataUpdateCoordinator):
         self.poll_mode = POLL_MODE_BACKOFF
         backoff = self._backoff_interval()
         self._set_interval(backoff)
+
+        if self._consecutive_errors >= REPAIR_ISSUE_ERROR_THRESHOLD:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                f"api_unreachable_{self.competitor_id}",
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="api_unreachable",
+                translation_placeholders={"team_name": self.team_name},
+            )
 
         if self._last_valid_data is not None:
             _LOGGER.warning("%s: Usando datos en caché", self.team_name)
@@ -299,6 +322,8 @@ class Scores365Coordinator(DataUpdateCoordinator):
                 st = next_game.get("startTime", "")
                 if st:
                     new_start = datetime.fromisoformat(st)
+                    if new_start.tzinfo is None:
+                        new_start = new_start.replace(tzinfo=timezone.utc)
                     # Reprogramar alarma solo si cambió la hora del partido
                     if (self._next_start_time is None
                             or abs((new_start - self._next_start_time).total_seconds()) > 5):
@@ -397,9 +422,9 @@ class Scores365Coordinator(DataUpdateCoordinator):
                 try:
                     start_dt = datetime.fromisoformat(start_time_str)
                     start_datetime_5min = start_dt - timedelta(minutes=5)
-                    if start_datetime_5min.tzinfo is None:
-                        from homeassistant.util import dt as dt_util
-                        start_datetime_5min = dt_util.as_local(start_datetime_5min)
+                    # as_local() normaliza tanto datetimes naive (asumidos UTC)
+                    # como aware (con offset propio de la API) a la zona local de HA
+                    start_datetime_5min = dt_util.as_local(start_datetime_5min)
                 except ValueError:
                     pass
             rival_name, rival_logo = self._get_rival(home, away)
@@ -465,8 +490,22 @@ class Scores365Coordinator(DataUpdateCoordinator):
         return None
 
     def _get_rival(self, home: dict, away: dict) -> tuple[str, str]:
-        """Devuelve (nombre, logo) del rival — el competitor que no es el equipo monitoreado."""
-        rival = away if self._is_team(home) else home
+        """Devuelve (nombre, logo) del rival — el competitor que no es el equipo monitoreado.
+
+        Si no se identifica al equipo monitoreado en ninguno de los dos
+        competitors, se asume que `home` es el rival (comportamiento de
+        fallback, registrado como warning).
+        """
+        is_home_team = self._is_team(home)
+        is_away_team = self._is_team(away)
+        if not is_home_team and not is_away_team:
+            _LOGGER.warning(
+                "%s: No se pudo identificar al equipo monitoreado entre '%s' y '%s' "
+                "(competitor_id=%s) — usando '%s' como rival por defecto",
+                self.team_name, home.get("name", ""), away.get("name", ""),
+                self.competitor_id, home.get("name", ""),
+            )
+        rival = away if is_home_team else home
         return (
             rival.get("name", ""),
             LOGO_BASE_URL.format(competitor_id=rival.get("id", "")),
@@ -479,6 +518,12 @@ class Scores365Coordinator(DataUpdateCoordinator):
         elif self._is_team(away):
             team_score, rival_score = away_score, home_score
         else:
+            _LOGGER.warning(
+                "%s: No se pudo identificar al equipo monitoreado entre '%s' y '%s' "
+                "(competitor_id=%s) — resultado indeterminado, devolviendo '%s' por defecto",
+                self.team_name, home.get("name", ""), away.get("name", ""),
+                self.competitor_id, RESULT_DRAW,
+            )
             return RESULT_DRAW
         if team_score > rival_score:
             return RESULT_WIN

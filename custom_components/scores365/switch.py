@@ -7,13 +7,11 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import (
-    CONF_COMPETITOR_ID,
-    CONF_TEAM_NAME,
     DOMAIN,
     SWITCH_EVENTO_EQUIPO_GANA,
     SWITCH_EVENTO_GLOBAL,
@@ -22,6 +20,7 @@ from .const import (
     SWITCH_EVENTO_PREVIO_PARTIDO,
     SWITCHES_DEPENDIENTES,
 )
+from .entity import Scores365EntityMixin
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,7 +45,7 @@ async def async_setup_entry(
     ])
 
 
-class Scores365Switch(RestoreEntity, SwitchEntity):
+class Scores365Switch(Scores365EntityMixin, RestoreEntity, SwitchEntity):
     """
     Switch persistente para habilitar/deshabilitar eventos por equipo.
 
@@ -57,14 +56,13 @@ class Scores365Switch(RestoreEntity, SwitchEntity):
 
     def __init__(self, entry: ConfigEntry, switch_key: str,
                  friendly_name: str, icon: str, is_global: bool) -> None:
+        self._init_common(entry)
         self._entry         = entry
         self._switch_key    = switch_key
-        self._team_name     = entry.data[CONF_TEAM_NAME]
-        self._competitor_id = entry.data[CONF_COMPETITOR_ID]
         self._is_global     = is_global
         self._is_on: bool   = True   # por defecto ON al instalar
         self._attr_name         = f"{self._team_name} {friendly_name}"
-        self._attr_unique_id    = f"{DOMAIN}_{self._competitor_id}_{switch_key}"
+        self._attr_unique_id    = self._build_unique_id(switch_key)
         self._attr_icon         = icon
 
     # ------------------------------------------------------------------
@@ -83,21 +81,14 @@ class Scores365Switch(RestoreEntity, SwitchEntity):
     # ------------------------------------------------------------------
 
     @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._competitor_id)},
-            name=self._team_name,
-            manufacturer="365Scores",
-            model="Fútbol en vivo",
-            sw_version="1.5.0",
-        )
-
-    @property
     def is_on(self) -> bool:
         return self._is_on
 
     @property
     def available(self) -> bool:
+        """Siempre disponible: es una preferencia local (RestoreEntity), no
+        depende de la salud de la API — el usuario debe poder togglear estos
+        switches incluso si 365Scores está caído."""
         return True
 
     @property
@@ -145,32 +136,31 @@ class Scores365Switch(RestoreEntity, SwitchEntity):
 
     def _get_global_state(self) -> bool:
         """Lee el estado actual del switch global de este equipo."""
-        from homeassistant.helpers import entity_registry as er
         registry = er.async_get(self.hass)
-        global_uid = f"{DOMAIN}_{self._competitor_id}_{SWITCH_EVENTO_GLOBAL}"
-        for entity in registry.entities.values():
-            if entity.unique_id == global_uid:
-                state = self.hass.states.get(entity.entity_id)
-                return state.state == "on" if state else False
-        return False
+        global_uid = self._build_unique_id(SWITCH_EVENTO_GLOBAL)
+        entity_id = registry.async_get_entity_id("switch", DOMAIN, global_uid)
+        if entity_id is None:
+            return False
+        state = self.hass.states.get(entity_id)
+        return state.state == "on" if state else False
 
     async def _apagar_dependientes(self) -> None:
         """Apaga todos los switches dependientes cuando el global se apaga."""
-        from homeassistant.helpers import entity_registry as er
         registry = er.async_get(self.hass)
 
         for key in SWITCHES_DEPENDIENTES:
-            uid = f"{DOMAIN}_{self._competitor_id}_{key}"
-            for entity in registry.entities.values():
-                if entity.unique_id == uid:
-                    state = self.hass.states.get(entity.entity_id)
-                    if state and state.state == "on":
-                        await self.hass.services.async_call(
-                            "switch", "turn_off",
-                            {"entity_id": entity.entity_id},
-                            blocking=True,
-                        )
-                        _LOGGER.debug(
-                            "%s: %s apagado por Global OFF",
-                            self._team_name, key,
-                        )
+            uid = self._build_unique_id(key)
+            entity_id = registry.async_get_entity_id("switch", DOMAIN, uid)
+            if entity_id is None:
+                continue
+            state = self.hass.states.get(entity_id)
+            if state and state.state == "on":
+                await self.hass.services.async_call(
+                    "switch", "turn_off",
+                    {"entity_id": entity_id},
+                    blocking=True,
+                )
+                _LOGGER.debug(
+                    "%s: %s apagado por Global OFF",
+                    self._team_name, key,
+                )

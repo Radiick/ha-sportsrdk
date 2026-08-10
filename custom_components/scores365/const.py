@@ -3,6 +3,9 @@
 DOMAIN = "scores365"
 PLATFORMS = ["sensor", "binary_sensor", "switch", "number", "button"]
 
+# Debe coincidir con manifest.json["version"] — actualizar ambos al lanzar una versión.
+VERSION = "1.7.0"
+
 # Config keys
 CONF_COMPETITOR_ID = "competitor_id"
 CONF_TEAM_NAME     = "team_name"
@@ -39,6 +42,10 @@ TTL_DEFAULT      = 60   # Fallback si la API no devuelve ttl
 MAX_RETRIES        = 3
 RETRY_BACKOFF_BASE = 10
 RETRY_BACKOFF_MAX  = 300
+
+# Ciclos consecutivos fallidos de _async_update_data (no reintentos dentro
+# de un ciclo) tras los cuales se crea un repair issue visible en HA
+REPAIR_ISSUE_ERROR_THRESHOLD = 5
 
 # Status groups de la API
 STATUS_GROUP_FINISHED = 4
@@ -85,3 +92,22 @@ DELAY_MIN     = 0
 DELAY_MAX     = 60
 DELAY_STEP    = 1
 DELAY_DEFAULT = 0
+
+# Device trigger types — eventos del partido expuestos en la UI de automatizaciones
+DEVICE_TRIGGER_PREVIO_PARTIDO  = "previo_partido"
+DEVICE_TRIGGER_PARTIDO_INICIA  = "partido_inicia"
+DEVICE_TRIGGER_MEDIO_TIEMPO    = "medio_tiempo"
+DEVICE_TRIGGER_SEGUNDO_TIEMPO  = "segundo_tiempo"
+DEVICE_TRIGGER_PARTIDO_TERMINA = "partido_termina"
+DEVICE_TRIGGER_GOL             = "gol"
+DEVICE_TRIGGER_EQUIPO_GANA     = "equipo_gana"
+
+DEVICE_TRIGGER_TYPES = [
+    DEVICE_TRIGGER_PREVIO_PARTIDO,
+    DEVICE_TRIGGER_PARTIDO_INICIA,
+    DEVICE_TRIGGER_MEDIO_TIEMPO,
+    DEVICE_TRIGGER_SEGUNDO_TIEMPO,
+    DEVICE_TRIGGER_PARTIDO_TERMINA,
+    DEVICE_TRIGGER_GOL,
+    DEVICE_TRIGGER_EQUIPO_GANA,
+]

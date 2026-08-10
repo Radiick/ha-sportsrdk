@@ -7,12 +7,12 @@ from homeassistant.components.binary_sensor import BinarySensorDeviceClass, Bina
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_COMPETITOR_ID, CONF_TEAM_NAME, DOMAIN
+from .const import DOMAIN
 from .coordinator import Scores365Coordinator
+from .entity import Scores365EntityMixin
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,31 +37,20 @@ async def async_setup_entry(
     ])
 
 
-class Scores365BinarySensor(CoordinatorEntity, BinarySensorEntity):
+class Scores365BinarySensor(Scores365EntityMixin, CoordinatorEntity, BinarySensorEntity):
 
     def __init__(self, coordinator: Scores365Coordinator, entry: ConfigEntry,
                  sensor_type: str, friendly_name: str, icon: str,
                  device_class: BinarySensorDeviceClass | None,
                  entity_category: EntityCategory | None) -> None:
         super().__init__(coordinator)
+        self._init_common(entry)
         self._sensor_type           = sensor_type
-        self._team_name             = entry.data[CONF_TEAM_NAME]
-        self._competitor_id         = entry.data[CONF_COMPETITOR_ID]
         self._attr_name             = f"{self._team_name} {friendly_name}"
-        self._attr_unique_id        = f"{DOMAIN}_{self._competitor_id}_{sensor_type}"
+        self._attr_unique_id        = self._build_unique_id(sensor_type)
         self._attr_icon             = icon
         self._attr_device_class     = device_class
         self._attr_entity_category  = entity_category
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._competitor_id)},
-            name=self._team_name,
-            manufacturer="365Scores",
-            model="Fútbol en vivo",
-            sw_version="1.5.0",
-        )
 
     @property
     def is_on(self) -> bool | None:

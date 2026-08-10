@@ -177,6 +177,38 @@ automation:
 
 ---
 
+## v1.7.0 — Novedades
+
+### Device Triggers
+Los 7 eventos del partido (previo al partido, inicia, medio tiempo, segundo tiempo,
+termina, gol, equipo gana) ahora están disponibles directamente en la pestaña
+**Automatizaciones** de cada dispositivo en Home Assistant, sin necesidad de usar
+el blueprint.
+
+### Diagnósticos y reparaciones
+- Soporte para **Descargar diagnósticos** desde la página del dispositivo/integración
+- Aviso de reparación (*repair issue*) visible en HA si la API de 365Scores no
+  responde tras varios ciclos consecutivos — se resuelve solo al recuperar la conexión
+
+### Mejoras técnicas
+- Reutiliza la sesión HTTP administrada por Home Assistant en lugar de crear una nueva en cada consulta
+- Traducciones: inglés como idioma base, español como traducción completa
+- Corrección de inconsistencias de zona horaria en el cálculo de "próximo partido"
+- Búsquedas del entity registry optimizadas (sin recorrer todas las entidades de la instalación)
+
+### Limitaciones conocidas
+El texto de estado (`statusText`) durante tiempo extra o penales puede no coincidir
+con ningún trigger conocido del blueprint (ej. "Entretiempo"), ya que el vocabulario
+completo de la API no está documentado. No se implementa manejo especulativo de estos casos.
+
+### Roadmap
+Soporte para sensores de liga/competición completos, tabla de posiciones y
+multi-deporte están fuera de alcance de esta versión. `league_name` se recolecta
+en la configuración pero actualmente no se usa — es un placeholder para una
+futura expansión arquitectónica mayor.
+
+---
+
 ## Ejemplo completo con switches y delay
 
 ```yaml

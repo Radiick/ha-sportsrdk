@@ -1,5 +1,6 @@
 # ============================================================
 # EJEMPLO DE AUTOMATIZACIÓN USANDO EL BLUEPRINT 365Scores
+# Verificado contra scores365_eventos_partido.yaml — v1.7.0
 # ============================================================
 
 automation:
@@ -11,16 +12,14 @@ automation:
         # --- Sección 1: Entidades ---
         sensor_estado:         sensor.real_madrid_estado_del_partido
         sensor_minuto:         sensor.real_madrid_minuto
-        sensor_timestamp_5min: sensor.real_madrid_proximo_timestamp_5min
+        sensor_datetime_5min:  sensor.real_madrid_proximo_-5min
         binary_gol:            binary_sensor.real_madrid_gol
         binary_favorable:      binary_sensor.real_madrid_resultado_favorable
 
         # --- Sección 2: Switches y delay ---
         switch_global:          switch.real_madrid_eventos_global
         switch_previo_partido:  switch.real_madrid_evento_previo_partido
-        switch_partido_inicia:  switch.real_madrid_evento_partido_inicia
-        switch_medio_tiempo:    switch.real_madrid_evento_medio_tiempo
-        switch_partido_termina: switch.real_madrid_evento_partido_termina
+        switch_cambios_tiempo:  switch.real_madrid_evento_cambios_tiempo
         switch_gol:             switch.real_madrid_evento_gol
         switch_equipo_gana:     switch.real_madrid_evento_equipo_gana
         number_delay:           number.real_madrid_delay_automatizacion

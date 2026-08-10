@@ -10,6 +10,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     API_BASE_URL,
@@ -83,15 +84,15 @@ class Scores365ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         params = {**API_PARAMS, "competitors": competitor_id, "timestamp": timestamp}
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    API_BASE_URL,
-                    params=params,
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as response:
-                    if response.status != 200:
-                        return False, ""
-                    data = await response.json(content_type=None)
+            session = async_get_clientsession(self.hass)
+            async with session.get(
+                API_BASE_URL,
+                params=params,
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as response:
+                if response.status != 200:
+                    return False, ""
+                data = await response.json(content_type=None)
 
             games = data.get("games", [])
             if games:
